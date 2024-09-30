@@ -1,20 +1,21 @@
 package sign
 
 import (
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"math/big"
+	"strings"
 
 	"tss-sdk/tss/common"
 	"tss-sdk/tss/crypto"
 	"tss-sdk/tss/protocols/cggmp/keygen"
 	"tss-sdk/tss/protocols/utils"
 	"tss-sdk/tss/tss"
-)
 
-// Implements Party
-// Implements Stringer
-var _ tss.Party = (*LocalParty)(nil)
-var _ fmt.Stringer = (*LocalParty)(nil)
+	"github.com/ipfs/go-log"
+)
 
 type (
 	LocalParty struct {
@@ -25,14 +26,13 @@ type (
 		temp localTempData
 		data *common.SignatureData
 
-		// outbound messaging
-		out chan<- tss.Message
-		end chan<- *common.SignatureData
+		number int
+		ok     []bool
 	}
 
 	localMessageStore struct {
 		signRound1Messages,
-		signRound2Messages []tss.ParsedMessage
+		signRound2Messages [][]byte // msg.WireBytes()
 	}
 
 	localTempData struct {
@@ -58,105 +58,116 @@ type (
 	}
 )
 
+type OnsignExecResult struct {
+	Ok           bool   `json:"ok"`
+	Err          string `json:"error"`
+	MsgWireBytes []byte `json:"data"`
+}
+
+type OnsignResult struct {
+	Ok  bool   `json:"ok"`
+	Err string `json:"error"`
+}
+
+var SignParties = map[string]*LocalParty{}
+
 func NewLocalParty(
-	msg *big.Int,
 	isThreshold bool,
-	params *tss.Parameters,
-	path string,
-	key keygen.LocalPartySaveData,
-	out chan<- tss.Message,
-	end chan<- *common.SignatureData,
-	fullBytesLen ...int,
-) (tss.Party, error) {
-	key, err := keygen.BuildLocalSaveDataSubset(key, params.Parties().IDs())
+	key string,
+	partyIndex int,
+	partyCount int,
+	pIDs []string,
+	msg string, // hex string
+	keyData string, // keygen.LocalPartySaveData, base64 string
+	walletPath string,
+) (result OnsignResult) {
+	if err := log.SetLogLevel("tss-lib", "info"); err != nil {
+		common.Logger.Errorf("set log level, err: %s", err.Error())
+		result.Err = fmt.Sprintf("set log level, err: %s", err.Error())
+		return
+	}
+	tss.SetCurve(tss.Edwards())
+
+	uIds := make(tss.UnSortedPartyIDs, 0, partyCount)
+	for i := 0; i < partyCount; i++ {
+		pId, _ := new(big.Int).SetString(pIDs[i], 10)
+		common.Logger.Infof("id: %d", pId)
+		uIds = append(uIds, tss.NewPartyID(fmt.Sprintf("%d", i), fmt.Sprintf("m_%d", i), pId))
+	}
+	ids := tss.SortPartyIDs(uIds)
+	p2pCtx := tss.NewPeerContext(ids)
+	params := tss.NewParameters(tss.Edwards(), p2pCtx, ids[partyIndex], partyCount, partyCount)
+
+	keyDataBytes, err := base64.StdEncoding.DecodeString(keyData)
 	if err != nil {
-		return nil, err
+		common.Logger.Errorf("base64 decode keygen data fail, err:%s", err.Error())
+		result.Err = fmt.Sprintf("base64 decode keygen data fail, err:%s", err.Error())
+		return
+	}
+	keys := keygen.LocalPartySaveData{}
+	if err := json.Unmarshal(keyDataBytes, &keys); err != nil {
+		common.Logger.Errorf("unmarshal keygen save data err: %s", err.Error())
+		result.Err = fmt.Sprintf("unmarshal keygen save data err: %s", err.Error())
+		return
 	}
 
-	err = utils.UpdateKeyForSigning(&key, path, isThreshold, params.Threshold())
-	if err != nil {
-		return nil, err
+	common.Logger.Infof("wallet path: %s", walletPath)
+	common.Logger.Infof("keys.PubXj count: %d", len(keys.PubXj))
+	parts := strings.Split(walletPath, "/")
+	if len(parts) != 5 {
+		common.Logger.Errorf("wallet path err: %s", walletPath)
+		result.Err = fmt.Sprintf("wallet path err: %s", walletPath)
+		return
 	}
 
-	partyCount := len(params.Parties().IDs())
+	keyParty, err := keygen.BuildLocalSaveDataSubset(keys, params.Parties().IDs())
+	if err != nil {
+		result.Err = fmt.Sprintf("BuildLocalSaveDataSubset err: %s", err.Error())
+		common.Logger.Errorf("BuildLocalSaveDataSubset err: %s", err.Error())
+		return
+	}
+
+	err = utils.UpdateKeyForSigning(&keyParty, walletPath, isThreshold, params.Threshold())
+	if err != nil {
+		result.Err = fmt.Sprintf("UpdateKeyForSigningh err: %s", err.Error())
+		common.Logger.Errorf("UpdateKeyForSigningh err: %s", err.Error())
+		return
+	}
+
 	p := &LocalParty{
 		BaseParty: new(tss.BaseParty),
 		params:    params,
-		keys:      key,
+		keys:      keys,
 		temp:      localTempData{},
 		data:      &common.SignatureData{},
-		out:       out,
-		end:       end,
+		ok:        make([]bool, partyCount),
 	}
 	// msgs init
-	p.temp.signRound1Messages = make([]tss.ParsedMessage, partyCount)
-	p.temp.signRound2Messages = make([]tss.ParsedMessage, partyCount)
+	p.temp.signRound1Messages = make([][]byte, partyCount)
+	p.temp.signRound2Messages = make([][]byte, partyCount)
 
 	// temp data init
-	p.temp.m = msg
-	if len(fullBytesLen) > 0 {
-		p.temp.fullBytesLen = fullBytesLen[0]
-	} else {
-		p.temp.fullBytesLen = 0
+	m, err := hex.DecodeString(msg)
+	if err != nil {
+		common.Logger.Errorf("hex decode msg err: %s", err.Error())
+		result.Err = fmt.Sprintf("hex decode msg err: %s", err.Error())
+		return
 	}
+	p.temp.m = new(big.Int).SetBytes(m)
 	p.temp.isThreshold = isThreshold
 	p.temp.Rj = make([]*crypto.ECPoint, partyCount)
-	return p, nil
+
+	SignParties[key] = p
+	result.Ok = true
+	return
 }
 
-func (p *LocalParty) FirstRound() tss.Round {
-	return newRound1(p.temp.isThreshold, p.params, &p.keys, p.data, &p.temp, p.out, p.end)
-}
-
-func (p *LocalParty) Start() *tss.Error {
-	return tss.BaseStart(p, TaskName)
-}
-
-func (p *LocalParty) Update(msg tss.ParsedMessage) (ok bool, err *tss.Error) {
-	return tss.BaseUpdate(p, msg, TaskName)
-}
-
-func (p *LocalParty) UpdateFromBytes(wireBytes []byte, from *tss.PartyID, isBroadcast bool) (bool, *tss.Error) {
-	msg, err := tss.ParseWireMessage(wireBytes, from, isBroadcast)
-	if err != nil {
-		return false, p.WrapError(err)
+func RemoveSignParty(key string) bool {
+	if _, ok := SignParties[key]; !ok {
+		return false
 	}
-	return p.Update(msg)
-}
-
-func (p *LocalParty) ValidateMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
-	if msg.GetFrom() == nil || !msg.GetFrom().ValidateBasic() {
-		return false, p.WrapError(fmt.Errorf("received msg with an invalid sender: %s", msg))
-	}
-	// check that the message's "from index" will fit into the array
-	if maxFromIdx := len(p.params.Parties().IDs()) - 1; maxFromIdx < msg.GetFrom().Index {
-		return false, p.WrapError(fmt.Errorf("received msg with a sender index too great (%d <= %d)",
-			maxFromIdx, msg.GetFrom().Index), msg.GetFrom())
-	}
-	return p.BaseParty.ValidateMessage(msg)
-}
-
-func (p *LocalParty) StoreMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
-	// ValidateBasic is cheap; double-check the message here in case the public StoreMessage was called externally
-	if ok, err := p.ValidateMessage(msg); !ok || err != nil {
-		return ok, err
-	}
-	fromPIdx := msg.GetFrom().Index
-
-	// switch/case is necessary to store any messages beyond current round
-	// this does not handle message replays. we expect the caller to apply replay and spoofing protection.
-	switch msg.Content().(type) {
-	case *SignRound1Message:
-		p.temp.signRound1Messages[fromPIdx] = msg
-
-	case *SignRound2Message:
-		p.temp.signRound2Messages[fromPIdx] = msg
-
-	default: // unrecognised message, just ignore!
-		common.Logger.Warningf("unrecognised message ignored: %v", msg)
-		return false, nil
-	}
-	return true, nil
+	delete(SignParties, key)
+	return true
 }
 
 func (p *LocalParty) PartyID() *tss.PartyID {
@@ -165,4 +176,16 @@ func (p *LocalParty) PartyID() *tss.PartyID {
 
 func (p *LocalParty) String() string {
 	return fmt.Sprintf("id: %s, %s", p.PartyID(), p.BaseParty.String())
+}
+
+// `ok` tracks parties which have been verified by Update()
+func (round *LocalParty) resetOK() {
+	for j := range round.ok {
+		round.ok[j] = false
+	}
+}
+
+// get ssid from local params
+func (round *LocalParty) getSSID() ([]byte, error) {
+	return []byte("eddsa-sign"), nil
 }

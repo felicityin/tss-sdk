@@ -1,37 +1,24 @@
 package sign
 
 import (
-	"errors"
+	"encoding/base64"
+	"fmt"
 	"math/big"
 
 	"tss-sdk/tss/common"
 	"tss-sdk/tss/crypto"
-	"tss-sdk/tss/protocols/cggmp/keygen"
 	"tss-sdk/tss/tss"
 )
 
-// round 1 represents round 1 of the signing part of the EDDSA TSS spec
-func newRound1(
-	isThreshold bool,
-	params *tss.Parameters,
-	key *keygen.LocalPartySaveData,
-	data *common.SignatureData,
-	temp *localTempData,
-	out chan<- tss.Message,
-	end chan<- *common.SignatureData,
-) tss.Round {
-	return &round1{
-		&base{params, isThreshold, key, data, temp, out, end, make([]bool, len(params.Parties().IDs())), false, 1},
-	}
-}
-
-func (round *round1) Start() *tss.Error {
-	if round.started {
-		return round.WrapError(errors.New("round already started"))
+func OnSignRound1Exec(key string) (result OnsignExecResult) {
+	round, ok := SignParties[key]
+	if !ok {
+		common.Logger.Errorf("party not found: %s", key)
+		result.Err = fmt.Sprintf("party not found: %s", key)
+		return
 	}
 
 	round.number = 1
-	round.started = true
 	round.resetOK()
 
 	Pi := round.PartyID()
@@ -42,50 +29,80 @@ func (round *round1) Start() *tss.Error {
 	var err error
 	round.temp.ssid, err = round.getSSID()
 	if err != nil {
-		return round.WrapError(err)
+		return
 	}
 
-	round.temp.d = common.GetRandomPositiveInt(round.Rand(), round.Params().EC().Params().N)
-	round.temp.e = common.GetRandomPositiveInt(round.Rand(), round.Params().EC().Params().N)
+	round.temp.d = common.GetRandomPositiveInt(round.params.Rand(), round.params.EC().Params().N)
+	round.temp.e = common.GetRandomPositiveInt(round.params.Rand(), round.params.EC().Params().N)
 
-	D := crypto.ScalarBaseMult(round.EC(), round.temp.d)
-	E := crypto.ScalarBaseMult(round.EC(), round.temp.e)
+	D := crypto.ScalarBaseMult(round.params.EC(), round.temp.d)
+	E := crypto.ScalarBaseMult(round.params.EC(), round.temp.e)
 
-	// broadcast
 	common.Logger.Debugf("P[%d]: round_1 broadcast", i)
-	r1msg, err := NewSignRound1Message(round.PartyID(), D, E)
+	msg, err := NewSignRound1Message(round.PartyID(), D, E)
 	if err != nil {
-		return round.WrapError(err)
+		common.Logger.Errorf("P[%d]: NewSignRound1Message err: %s", i, err.Error())
+		result.Err = fmt.Sprintf("P[%d]: NewSignRound1Message err: %s", i, err.Error())
 	}
-	round.temp.signRound1Messages[i] = r1msg
-	round.out <- r1msg
+	msgWireBytes, _, err := msg.WireBytes()
+	if err != nil {
+		common.Logger.Errorf("get msg wire bytes error: %s", key)
+		result.Err = fmt.Sprintf("get msg wire bytes error: %s", key)
+		return
+	}
+	round.temp.signRound1Messages[i] = msgWireBytes
 
-	return nil
+	result.Ok = true
+	result.MsgWireBytes = msgWireBytes
+	return result
 }
 
-func (round *round1) Update() (bool, *tss.Error) {
-	ret := true
-	for j, msg := range round.temp.signRound1Messages {
-		if round.ok[j] {
-			continue
-		}
-		if msg == nil || !round.CanAccept(msg) {
-			ret = false
-			continue
-		}
-		round.ok[j] = true
+func OnSignRound1MsgAccept(key string, from int, msgWireBytes string) (result OnsignResult) {
+	party, ok := SignParties[key]
+	if !ok {
+		common.Logger.Errorf("party not found: %s", key)
+		result.Err = fmt.Sprintf("party not found: %s", key)
+		return
 	}
-	return ret, nil
-}
 
-func (round *round1) CanAccept(msg tss.ParsedMessage) bool {
+	rMsgBytes, err := base64.StdEncoding.DecodeString(msgWireBytes)
+	if err != nil {
+		common.Logger.Errorf("msg error, msg base64 decode fail, err:%s", err.Error())
+		result.Err = fmt.Sprintf("msg error, msg base64 decode fail, err:%s", err.Error())
+		return
+	}
+
+	msg, err := tss.ParseWireMsg(rMsgBytes)
+	if err != nil {
+		common.Logger.Errorf("msg error, parse wire msg fail, err:%s", err.Error())
+		result.Err = fmt.Sprintf("msg error, parse wire msg fail, err:%s", err.Error())
+		return
+	}
+
 	if _, ok := msg.Content().(*SignRound1Message); ok {
-		return msg.IsBroadcast()
+		party.temp.signRound1Messages[from] = rMsgBytes
+	} else {
+		result.Err = "not SignRound1Message"
+		return
 	}
-	return false
+	result.Ok = true
+	return
 }
 
-func (round *round1) NextRound() tss.Round {
-	round.started = false
-	return &round2{round}
+func OnSignRound1Finish(key string) (result OnsignResult) {
+	party, ok := SignParties[key]
+	if !ok {
+		common.Logger.Errorf("party not found: %s", key)
+		result.Err = fmt.Sprintf("party not found: %s", key)
+		return
+	}
+
+	for j, msg := range party.temp.signRound1Messages {
+		if len(msg) == 0 {
+			result.Err = fmt.Sprintf("msg is null: %d", j)
+			return
+		}
+	}
+	result.Ok = true
+	return
 }

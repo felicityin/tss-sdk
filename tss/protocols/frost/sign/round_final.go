@@ -2,7 +2,7 @@ package sign
 
 import (
 	"encoding/hex"
-	"errors"
+	"encoding/json"
 	"fmt"
 	"math/big"
 
@@ -14,12 +14,14 @@ import (
 	"tss-sdk/tss/tss"
 )
 
-func (round *finalization) Start() *tss.Error {
-	if round.started {
-		return round.WrapError(errors.New("round already started"))
+func OnsignRound3Exec(key string) (result OnsignExecResult) {
+	round, ok := SignParties[key]
+	if !ok {
+		common.Logger.Errorf("party not found: %s", key)
+		result.Err = fmt.Sprintf("party not found: %s", key)
+		return
 	}
 	round.number = 3
-	round.started = true
 	round.resetOK()
 
 	Pi := round.PartyID()
@@ -29,27 +31,37 @@ func (round *finalization) Start() *tss.Error {
 
 	sumS := round.temp.si
 
-	for j, Pj := range round.Parties().IDs() {
+	for j, Pj := range round.params.Parties().IDs() {
 		round.ok[j] = true
 		if j == i {
 			continue
 		}
 
-		r2msg := round.temp.signRound2Messages[j].Content().(*SignRound2Message)
+		pMsg, err := tss.ParseWireMsg(round.temp.signRound2Messages[j])
+		if err != nil {
+			common.Logger.Errorf("msg error, parse wire msg fail, err:%s", err.Error())
+			result.Err = fmt.Sprintf("msg error, parse wire msg fail, err:%s", err.Error())
+			return
+		}
+		r2msg := pMsg.Content().(*SignRound2Message)
 		zi := r2msg.UnmarshalS()
 
-		ziGx, ziGy := round.EC().ScalarBaseMult(zi.Bytes())
-		ziG := crypto.NewECPointNoCurveCheck(round.EC(), ziGx, ziGy)
+		ziGx, ziGy := round.params.EC().ScalarBaseMult(zi.Bytes())
+		ziG := crypto.NewECPointNoCurveCheck(round.params.EC(), ziGx, ziGy)
 
-		tmp := round.key.PubXj[j].ScalarMult(round.temp.c)
-		tmp, err := tmp.Add(round.temp.Rj[j])
+		tmp := round.keys.PubXj[j].ScalarMult(round.temp.c)
+		tmp, err = tmp.Add(round.temp.Rj[j])
 		if err != nil {
-			return round.WrapError(fmt.Errorf("err: Rj + c * Xj: %s", err.Error()), Pj)
+			common.Logger.Errorf("[%d] err: Rj + c * Xj", Pj.Index)
+			result.Err = "err: err: Rj + c * Xj"
+			return
 		}
 
 		if hex.EncodeToString(ziG.X().Bytes()) != hex.EncodeToString(tmp.X().Bytes()) ||
 			hex.EncodeToString(ziG.Y().Bytes()) != hex.EncodeToString(tmp.Y().Bytes()) {
-			return round.WrapError(fmt.Errorf("err: Zj != Rj + c * Xj"), Pj)
+			common.Logger.Errorf("[%d] err: Zj != Rj + c * Xj", Pj.Index)
+			result.Err = "err: Zj != Rj + c * Xj"
+			return
 		}
 
 		sjBytes := bigIntToEncodedBytes(zi)
@@ -72,31 +84,25 @@ func (round *finalization) Start() *tss.Error {
 	}
 
 	pk := edwards.PublicKey{
-		Curve: round.Params().EC(),
-		X:     round.key.Pubkey.X(),
-		Y:     round.key.Pubkey.Y(),
+		Curve: round.params.EC(),
+		X:     round.keys.Pubkey.X(),
+		Y:     round.keys.Pubkey.Y(),
 	}
 
-	ok := edwards.Verify(&pk, round.data.M, round.temp.r, s)
-	if !ok {
-		return round.WrapError(fmt.Errorf("signature verification failed"))
+	if ok := edwards.Verify(&pk, round.data.M, round.temp.r, s); !ok {
+		common.Logger.Errorf("sig verify failed")
+		result.Err = "sig verify failed"
 	}
+
+	saveBytes, err := json.Marshal(round.data)
+	if err != nil {
+		common.Logger.Errorf("round_final save err: %s", err.Error())
+		result.Err = fmt.Sprintf("round_final save err: %s", err.Error())
+		return
+	}
+
 	common.Logger.Infof("party: %d, round 3 end", i)
-	round.end <- round.data
-
-	return nil
-}
-
-func (round *finalization) CanAccept(msg tss.ParsedMessage) bool {
-	// not expecting any incoming messages in this round
-	return false
-}
-
-func (round *finalization) Update() (bool, *tss.Error) {
-	// not expecting any incoming messages in this round
-	return false, nil
-}
-
-func (round *finalization) NextRound() tss.Round {
-	return nil // finished!
+	result.Ok = true
+	result.MsgWireBytes = saveBytes
+	return result
 }

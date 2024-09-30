@@ -34,12 +34,6 @@ type (
 	}
 )
 
-var (
-	_ tss.Round = (*round1)(nil)
-	_ tss.Round = (*round2)(nil)
-	_ tss.Round = (*finalization)(nil)
-)
-
 // ----- //
 
 func (round *base) Params() *tss.Parameters {
@@ -78,18 +72,4 @@ func (round *base) WaitingFor() []*tss.PartyID {
 
 func (round *base) WrapError(err error, culprits ...*tss.PartyID) *tss.Error {
 	return tss.NewError(err, TaskName, round.number, round.PartyID(), culprits...)
-}
-
-// ----- //
-
-// `ok` tracks parties which have been verified by Update()
-func (round *base) resetOK() {
-	for j := range round.ok {
-		round.ok[j] = false
-	}
-}
-
-// get ssid from local params
-func (round *base) getSSID() ([]byte, error) {
-	return []byte("eddsa-sign"), nil
 }
