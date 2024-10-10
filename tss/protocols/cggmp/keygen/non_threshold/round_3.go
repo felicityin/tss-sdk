@@ -10,10 +10,11 @@ import (
 	"tss-sdk/tss/common"
 	"tss-sdk/tss/crypto/alice/utils"
 	"tss-sdk/tss/crypto/schnorr"
+	u "tss-sdk/tss/protocols/utils"
 	"tss-sdk/tss/tss"
 )
 
-func KeygenRound3Exec(key string) (result KeygenExecResult) {
+func KeygenRound3Exec(key string) (result u.TssExecResult) {
 	round, ok := Parties[key]
 	if !ok {
 		result.Err = fmt.Sprintf("party not found: %s", key)
@@ -119,7 +120,7 @@ func KeygenRound3Exec(key string) (result KeygenExecResult) {
 	return result
 }
 
-func KeygenRound3Accept(key string, from int, msgWireBytes string) (result KeygenResult) {
+func KeygenRound3Accept(key string, from int, msgWireBytes string) (result u.TssResult) {
 	party, ok := Parties[key]
 	if !ok {
 		common.Logger.Errorf("party not found: %s", key)
@@ -150,7 +151,7 @@ func KeygenRound3Accept(key string, from int, msgWireBytes string) (result Keyge
 	return
 }
 
-func KeygenRound3Finish(key string) (result KeygenResult) {
+func KeygenRound3Finish(key string) (result u.TssResult) {
 	party, ok := Parties[key]
 	if !ok {
 		common.Logger.Errorf("party not found: %s", key)

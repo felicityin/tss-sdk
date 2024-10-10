@@ -11,10 +11,11 @@ import (
 
 	"tss-sdk/tss/common"
 	"tss-sdk/tss/crypto"
+	"tss-sdk/tss/protocols/utils"
 	"tss-sdk/tss/tss"
 )
 
-func OnsignRound3Exec(key string) (result OnsignExecResult) {
+func OnsignRound3Exec(key string) (result utils.TssExecResult) {
 	round, ok := SignParties[key]
 	if !ok {
 		common.Logger.Errorf("party not found: %s", key)

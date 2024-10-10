@@ -1,4 +1,4 @@
-package tsssdk
+package tssdk
 
 //#include <stdio.h>
 //#include <stdlib.h>
@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	keygen "tss-sdk/tss/protocols/cggmp/keygen/non_threshold"
+	"tss-sdk/tss/protocols/utils"
 )
 
 type MpcExecResult struct {
@@ -34,6 +35,7 @@ func (result MpcResult) ToJson() string {
 }
 
 func NewKeygenLocalParty(
+	algo string, // ecdsa or eddsa
 	key string,
 	partyIndex int,
 	partyCount int,
@@ -42,8 +44,8 @@ func NewKeygenLocalParty(
 	chainCode string, // hex string
 ) *MpcResult {
 	ids := strings.Split(pIDs, ",")
-	res := keygen.NewLocalParty(key, partyIndex, partyCount, ids, rootPrivKey, chainCode)
-	return resFromKeygen(res)
+	res := keygen.NewLocalParty(algo, key, partyIndex, partyCount, ids, rootPrivKey, chainCode)
+	return toMpcRes(res)
 }
 
 func RemoveKeygenParty(key string) bool {
@@ -52,56 +54,56 @@ func RemoveKeygenParty(key string) bool {
 
 func KeygenRound1Exec(key string) *MpcExecResult {
 	res := keygen.KeygenRound1Exec(key)
-	return execResFromKeygen(res)
+	return toMpcExecRes(res)
 }
 
 func KeygenRound1Accept(key string, from int, msgWireBytes string) *MpcResult {
 	res := keygen.KeygenRound1Accept(key, from, msgWireBytes)
-	return resFromKeygen(res)
+	return toMpcRes(res)
 }
 
 func KeygenRound1Finish(key string) *MpcResult {
 	res := keygen.KeygenRound1Finish(key)
-	return resFromKeygen(res)
+	return toMpcRes(res)
 }
 
 func KeygenRound2Exec(key string) *MpcExecResult {
 	res := keygen.KeygenRound2Exec(key)
-	return execResFromKeygen(res)
+	return toMpcExecRes(res)
 }
 
 func KeygenRound2Accept(key string, from int, msgWireBytes string) *MpcResult {
 	res := keygen.KeygenRound2Accept(key, from, msgWireBytes)
-	return resFromKeygen(res)
+	return toMpcRes(res)
 }
 
 func KeygenRound2Finish(key string) *MpcResult {
 	res := keygen.KeygenRound2Finish(key)
-	return resFromKeygen(res)
+	return toMpcRes(res)
 }
 
 func KeygenRound3Exec(key string) *MpcExecResult {
 	res := keygen.KeygenRound3Exec(key)
-	return execResFromKeygen(res)
+	return toMpcExecRes(res)
 }
 
 func KeygenRound3Accept(key string, from int, msgWireBytes string) *MpcResult {
 	res := keygen.KeygenRound3Accept(key, from, msgWireBytes)
-	return resFromKeygen(res)
+	return toMpcRes(res)
 }
 
 func KeygenRound3Finish(key string) *MpcResult {
 	res := keygen.KeygenRound3Finish(key)
-	return resFromKeygen(res)
+	return toMpcRes(res)
 }
 
 // chainCodes: hex string array
 func KeygenRound4Exec(key string) *MpcExecResult {
 	res := keygen.KeygenRound4Exec(key)
-	return execResFromKeygen(res)
+	return toMpcExecRes(res)
 }
 
-func execResFromKeygen(res keygen.KeygenExecResult) *MpcExecResult {
+func toMpcExecRes(res utils.TssExecResult) *MpcExecResult {
 	return &MpcExecResult{
 		Ok:           res.Ok,
 		Err:          res.Err,
@@ -109,7 +111,7 @@ func execResFromKeygen(res keygen.KeygenExecResult) *MpcExecResult {
 	}
 }
 
-func resFromKeygen(res keygen.KeygenResult) *MpcResult {
+func toMpcRes(res utils.TssResult) *MpcResult {
 	return &MpcResult{
 		Ok:  res.Ok,
 		Err: res.Err,

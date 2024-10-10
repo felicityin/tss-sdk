@@ -13,23 +13,9 @@ type (
 		*tss.Parameters
 		save    *LocalPartySaveData
 		temp    *localTempData
-		out     chan<- tss.Message
-		end     chan<- *LocalPartySaveData
 		ok      []bool // `ok` tracks parties which have been verified by Update()
 		started bool
 		number  int
-	}
-	round1 struct {
-		*base
-	}
-	round2 struct {
-		*round1
-	}
-	round3 struct {
-		*round2
-	}
-	round4 struct {
-		*round3
 	}
 )
 

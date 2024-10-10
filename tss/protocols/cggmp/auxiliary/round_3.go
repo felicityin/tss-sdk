@@ -12,15 +12,16 @@ import (
 	"tss-sdk/tss/crypto/facproof"
 	"tss-sdk/tss/crypto/modproof"
 	"tss-sdk/tss/crypto/prmproof"
-	"tss-sdk/tss/tss"
+	u "tss-sdk/tss/protocols/utils"
 )
 
-func (round *round3) Start() *tss.Error {
-	if round.started {
-		return round.WrapError(errors.New("round 3 already started"))
+func AuxRound3Exec(key string) (result u.TssExecResult) {
+	round, err := GetParty(key)
+	if err != nil {
+		result.Err = err.Error()
+		return
 	}
 	round.number = 3
-	round.started = true
 	round.resetOK()
 
 	i := round.PartyID().Index
@@ -31,11 +32,18 @@ func (round *round3) Start() *tss.Error {
 			continue
 		}
 
+		msg, err := u.ParseWireMsg(msg, "AuxRound2Message")
+		if err != nil {
+			result.Err = err.Error()
+			return
+		}
 		r2Msg := msg.Content().(*AuxRound2Message)
 
 		if !bytes.Equal(r2Msg.GetSsid(), round.temp.ssid) {
-			common.Logger.Errorf("[j: %d] payload.ssid != round.temp.ssid")
-			return round.WrapError(fmt.Errorf("[j: %d] payload.ssid != round.temp.ssid", j))
+			err = fmt.Errorf("[j: %d] payload.ssid != round.temp.ssid", j)
+			common.Logger.Errorf("%s", err.Error())
+			result.Err = err.Error()
+			return
 		}
 
 		round.save.PaillierPKs[j] = r2Msg.UnmarshalPaillierPK()
@@ -44,16 +52,23 @@ func (round *round3) Start() *tss.Error {
 		// Verify prm proof
 		prmProof, err := r2Msg.UnmarshalPrmProof()
 		if err != nil {
-			common.Logger.Errorf("[j: %d] unmarshal prm proof failed", j)
-			return round.WrapError(fmt.Errorf("[j: %d] unmarshal prm proof failed", j))
+			err = fmt.Errorf("[j: %d] unmarshal prm proof failed", j)
+			common.Logger.Errorf("%s", err.Error())
+			result.Err = err.Error()
+			return
 		}
 		if err := round.verifyPrmPubkeys(j, prmProof); err != nil {
-			return round.WrapError(err)
+			err = fmt.Errorf("verifyPrmPubkeys err: %s", err.Error())
+			common.Logger.Errorf("%s", err.Error())
+			result.Err = err.Error()
+			return
 		}
 		contextJ := common.AppendBigIntToBytesSlice(round.temp.ssid, big.NewInt(int64(j)))
 		if err := prmProof.Verify(contextJ); err != nil {
-			common.Logger.Errorf("[j: %d] verify prm proof failed: %s", j, err.Error())
-			return round.WrapError(fmt.Errorf("[j: %d] verify prm proof failed: %s", j, err.Error()))
+			err = fmt.Errorf("[j: %d] verify prm proof failed: %s", j, err.Error())
+			common.Logger.Errorf("%s", err.Error())
+			result.Err = err.Error()
+			return
 		}
 
 		common.Logger.Debugf("party: %d, round_3, calc V", i)
@@ -71,8 +86,10 @@ func (round *round3) Start() *tss.Error {
 
 		// Verify commited V_i
 		if !bytes.Equal(hash, round.temp.V[j]) {
-			common.Logger.Errorf("[j: %d] hash != V", j)
-			return round.WrapError(fmt.Errorf("[j: %d] commited v_i verify failed", j))
+			err = fmt.Errorf("[j: %d] hash != V", j)
+			common.Logger.Errorf("%s", err.Error())
+			result.Err = err.Error()
+			return
 		}
 
 		// Set rho as xor of all party's rho_i
@@ -85,11 +102,14 @@ func (round *round3) Start() *tss.Error {
 		round.temp.rho, round.save.PaillierSK.P, round.save.PaillierSK.Q, round.save.PedersenPKs[i].GetN(), modproof.MINIMALCHALLENGE,
 	)
 	if err != nil {
-		return round.WrapError(fmt.Errorf("party %d, calc mod proof failed: %s", i, err.Error()))
+		err = fmt.Errorf("party %d, calc mod proof failed: %s", i, err.Error())
+		common.Logger.Errorf("%s", err.Error())
+		result.Err = err.Error()
+		return
 	}
 
 	// P2P send proofs
-	for j, Pj := range round.Parties().IDs() {
+	for j, Pj := range round.params.Parties().IDs() {
 		if j == i {
 			round.ok[j] = true
 			continue
@@ -105,20 +125,34 @@ func (round *round3) Start() *tss.Error {
 			round.save.PedersenPKs[j],
 		)
 		if err != nil {
-			return round.WrapError(fmt.Errorf("[j: %d] calc fac proof failed: %s", j, err.Error()))
+			err = fmt.Errorf("[j: %d] calc fac proof failed: %s", j, err.Error())
+			common.Logger.Errorf("%s", err.Error())
+			result.Err = err.Error()
+			return
 		}
 
 		common.Logger.Debugf("P[%d]: send fac proof to P[%d]", i, j)
 		r3msg, err := NewAuxRound3Message(Pj, round.PartyID(), facProof, modProof)
 		if err != nil {
-			return round.WrapError(err, Pj)
+			err = fmt.Errorf("[j: %d] create aux round3 msg err: %s", j, err.Error())
+			common.Logger.Errorf("%s", err.Error())
+			result.Err = err.Error()
+			return
 		}
-		round.out <- r3msg
+		msgWireBytes, _, err := r3msg.WireBytes()
+		if err != nil {
+			err = fmt.Errorf("get msg wire bytes error: %s", key)
+			common.Logger.Errorf("%s", err.Error())
+			result.Err = err.Error()
+			return
+		}
+		round.temp.send.auxRound3Messages[j] = msgWireBytes
 	}
-	return nil
+	result.Ok = true
+	return result
 }
 
-func (round *round3) verifyPrmPubkeys(j int, msg *prmproof.RingPederssenParameterMessage) error {
+func (round *LocalParty) verifyPrmPubkeys(j int, msg *prmproof.RingPederssenParameterMessage) error {
 	n := new(big.Int).SetBytes(msg.N)
 	s := new(big.Int).SetBytes(msg.S)
 	t := new(big.Int).SetBytes(msg.T)
@@ -140,29 +174,57 @@ func (round *round3) verifyPrmPubkeys(j int, msg *prmproof.RingPederssenParamete
 	return nil
 }
 
-func (round *round3) CanAccept(msg tss.ParsedMessage) bool {
-	if _, ok := msg.Content().(*AuxRound3Message); ok {
-		return !msg.IsBroadcast()
+func GetRound3Msg(key string, to int) (result u.TssExecResult) {
+	party, err := GetParty(key)
+	if err != nil {
+		result.Err = err.Error()
+		return
 	}
-	return false
+	result.Ok = true
+	result.MsgWireBytes = party.temp.send.auxRound3Messages[to]
+	return
 }
 
-func (round *round3) Update() (bool, *tss.Error) {
-	ret := true
-	for j, msg := range round.temp.auxRound3Messages {
-		if round.ok[j] {
-			continue
-		}
-		if msg == nil || !round.CanAccept(msg) {
-			ret = false
-			continue
-		}
-		round.ok[j] = true
+func AuxRound3Accept(key string, from int, msgWireBytes string) (result u.TssResult) {
+	party, err := GetParty(key)
+	if err != nil {
+		result.Err = err.Error()
+		return
 	}
-	return ret, nil
+
+	msgBytes, msg, err := u.ParseRecvMsg(msgWireBytes)
+	if err != nil {
+		result.Err = err.Error()
+		return
+	}
+	party.temp.auxRound3Messages[from] = msgBytes
+
+	if _, ok := msg.Content().(*AuxRound3Message); !ok {
+		err := fmt.Errorf("not AuxRound3Message")
+		common.Logger.Errorf("%s", err.Error())
+		result.Err = err.Error()
+		return
+	}
+	result.Ok = true
+	return
 }
 
-func (round *round3) NextRound() tss.Round {
-	round.started = false
-	return &round4{round}
+func AuxRound3Finish(key string) (result u.TssResult) {
+	party, err := GetParty(key)
+	if err != nil {
+		result.Err = err.Error()
+		return
+	}
+
+	for j, msg := range party.temp.auxRound3Messages {
+		if j == party.PartyID().Index {
+			continue
+		}
+		if len(msg) == 0 {
+			result.Err = fmt.Sprintf("msg is null: %d", j)
+			return
+		}
+	}
+	result.Ok = true
+	return
 }

@@ -7,10 +7,11 @@ import (
 
 	"tss-sdk/tss/common"
 	"tss-sdk/tss/crypto/schnorr"
+	"tss-sdk/tss/protocols/utils"
 	"tss-sdk/tss/tss"
 )
 
-func KeygenRound4Exec(key string) (result KeygenExecResult) {
+func KeygenRound4Exec(key string) (result utils.TssExecResult) {
 	round, ok := Parties[key]
 	if !ok {
 		common.Logger.Errorf("party not found: %s", key)

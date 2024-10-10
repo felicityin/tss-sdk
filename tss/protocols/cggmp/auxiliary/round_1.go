@@ -1,7 +1,6 @@
 package auxiliary
 
 import (
-	"errors"
 	"fmt"
 	"math/big"
 	"strconv"
@@ -9,51 +8,45 @@ import (
 	"tss-sdk/tss/common"
 	"tss-sdk/tss/crypto"
 	"tss-sdk/tss/crypto/prmproof"
+	"tss-sdk/tss/protocols/utils"
 	"tss-sdk/tss/tss"
 )
 
 var ProofParameter = crypto.NewProofConfig(tss.S256().Params().N)
 
-// round 1 represents round 1 of the keygen part of the EDDSA TSS spec
-func newRound1(
-	params *tss.Parameters,
-	save *LocalPartySaveData,
-	temp *localTempData,
-	out chan<- tss.Message,
-	end chan<- *LocalPartySaveData,
-) tss.Round {
-	return &round1{
-		&base{params, save, temp, out, end, make([]bool, len(params.Parties().IDs())), false, 1},
+func AuxRound1Exec(key string) (result utils.TssExecResult) {
+	round, err := GetParty(key)
+	if err != nil {
+		result.Err = err.Error()
+		return
 	}
-}
 
-func (round *round1) Start() *tss.Error {
-	if round.started {
-		return round.WrapError(errors.New("round 1 already started"))
-	}
 	round.number = 1
-	round.started = true
 	round.resetOK()
 
 	Pi := round.PartyID()
 	i := Pi.Index
 	common.Logger.Infof("party: %d, round_1 start", i)
 
-	ids := round.Parties().IDs().Keys()
+	ids := round.params.Parties().IDs().Keys()
 	round.save.Ks = ids
 	round.save.ShareID = ids[i]
 
 	round.temp.ssidNonce = new(big.Int).SetUint64(0)
 	ssid, err := round.getSSID()
 	if err != nil {
-		return round.WrapError(err)
+		result.Err = fmt.Sprintf("get ssid err: %s", err.Error())
+		return
 	}
 	round.temp.ssid = ssid
 
 	if round.save.PaillierSK == nil {
-		round.save.PaillierSK, err = GeneratePaillier(round.Rand())
+		round.save.PaillierSK, err = GeneratePaillier(round.params.Rand())
 		if err != nil {
-			return round.WrapError(errors.New("paillier sk generation failed"), Pi)
+			err = fmt.Errorf("paillier sk generation failed: %s", err.Error())
+			common.Logger.Errorf("%s", err.Error())
+			result.Err = err.Error()
+			return
 		}
 	}
 	round.save.PaillierPKs[i] = &round.save.PaillierSK.PublicKey
@@ -61,8 +54,10 @@ func (round *round1) Start() *tss.Error {
 	// Set pedersen parameter from paillierKey: Sample r in Z_N^ast, lambda = Z_phi(N), t = r^2 and s = t^lambda mod N
 	pedersen, err := round.save.PaillierSK.NewPedersenParameterByPaillier()
 	if err != nil {
-		common.Logger.Errorf("generate ring-pedersen keys failed")
-		return round.WrapError(errors.New("generate ring-pedersen keys failed"), Pi)
+		err = fmt.Errorf("generate ring-pedersen keys failed: %s", err.Error())
+		common.Logger.Errorf("%s", err.Error())
+		result.Err = err.Error()
+		return
 	}
 	round.save.PedersenPKs[i] = pedersen.PedersenOpenParameter
 
@@ -78,13 +73,16 @@ func (round *round1) Start() *tss.Error {
 		prmproof.MINIMALCHALLENGE,
 	)
 	if err != nil {
-		return round.WrapError(fmt.Errorf("party: %d, generate prm proof error: %s", i, err.Error()))
+		err = fmt.Errorf("party: %d, generate prm proof error: %s", i, err.Error())
+		common.Logger.Errorf("%s", err.Error())
+		result.Err = err.Error()
+		return
 	}
 	round.temp.prmProof = prmProof
 
-	round.temp.u, _ = common.GetRandomBytes(round.Rand(), 32)
-	round.temp.rho, _ = common.GetRandomBytes(round.Rand(), 32)
-	round.temp.srid, _ = common.GetRandomBytes(round.Rand(), 32)
+	round.temp.u, _ = common.GetRandomBytes(round.params.Rand(), 32)
+	round.temp.rho, _ = common.GetRandomBytes(round.params.Rand(), 32)
+	round.temp.srid, _ = common.GetRandomBytes(round.params.Rand(), 32)
 
 	// Compute V_i
 	hash := common.SHA512_256(
@@ -101,38 +99,61 @@ func (round *round1) Start() *tss.Error {
 
 	common.Logger.Infof("party: %d, round_1 broadcast", i)
 
-	// BROADCAST commitments
-	{
-		msg := NewAuxRound1Message(round.PartyID(), hash)
-		round.temp.auxRound1Messages[i] = msg
-		round.out <- msg
+	msg := NewAuxRound1Message(round.PartyID(), hash)
+	msgWireBytes, _, err := msg.WireBytes()
+	if err != nil {
+		err = fmt.Errorf("get msg wire bytes error: %s", err.Error())
+		common.Logger.Errorf("%s", err.Error())
+		result.Err = err.Error()
+		return
 	}
-	return nil
+	round.temp.auxRound1Messages[i] = msgWireBytes
+
+	result.Ok = true
+	result.MsgWireBytes = msgWireBytes
+	return result
 }
 
-func (round *round1) CanAccept(msg tss.ParsedMessage) bool {
-	if _, ok := msg.Content().(*AuxRound1Message); ok {
-		return msg.IsBroadcast()
+func AuxRound1Accept(key string, from int, msgWireBytes string) (result utils.TssResult) {
+	party, err := GetParty(key)
+	if err != nil {
+		result.Err = err.Error()
+		return
 	}
-	return false
+
+	msgBytes, msg, err := utils.ParseRecvMsg(msgWireBytes)
+	if err != nil {
+		result.Err = err.Error()
+		return
+	}
+	party.temp.auxRound1Messages[from] = msgBytes
+
+	if _, ok := msg.Content().(*AuxRound1Message); !ok {
+		err := fmt.Errorf("not AuxRound1Message")
+		common.Logger.Errorf("%s", err.Error())
+		result.Err = err.Error()
+		return
+	}
+	result.Ok = true
+	return
 }
 
-func (round *round1) Update() (bool, *tss.Error) {
-	ret := true
-	for j, msg := range round.temp.auxRound1Messages {
-		if round.ok[j] {
+func AuxRound1Finish(key string) (result utils.TssResult) {
+	party, err := GetParty(key)
+	if err != nil {
+		result.Err = err.Error()
+		return
+	}
+
+	for j, msg := range party.temp.auxRound1Messages {
+		if j == party.PartyID().Index {
 			continue
 		}
-		if msg == nil || !round.CanAccept(msg) {
-			ret = false
-			continue
+		if len(msg) == 0 {
+			result.Err = fmt.Sprintf("msg is null: %d", j)
+			return
 		}
-		round.ok[j] = true
 	}
-	return ret, nil
-}
-
-func (round *round1) NextRound() tss.Round {
-	round.started = false
-	return &round2{round}
+	result.Ok = true
+	return
 }

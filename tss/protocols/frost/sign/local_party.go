@@ -8,13 +8,13 @@ import (
 	"math/big"
 	"strings"
 
+	"github.com/ipfs/go-log"
+
 	"tss-sdk/tss/common"
 	"tss-sdk/tss/crypto"
 	"tss-sdk/tss/protocols/cggmp/keygen"
 	"tss-sdk/tss/protocols/utils"
 	"tss-sdk/tss/tss"
-
-	"github.com/ipfs/go-log"
 )
 
 type (
@@ -58,17 +58,6 @@ type (
 	}
 )
 
-type OnsignExecResult struct {
-	Ok           bool   `json:"ok"`
-	Err          string `json:"error"`
-	MsgWireBytes []byte `json:"data"`
-}
-
-type OnsignResult struct {
-	Ok  bool   `json:"ok"`
-	Err string `json:"error"`
-}
-
 var SignParties = map[string]*LocalParty{}
 
 func NewLocalParty(
@@ -80,7 +69,7 @@ func NewLocalParty(
 	msg string, // hex string
 	keyData string, // keygen.LocalPartySaveData, base64 string
 	walletPath string,
-) (result OnsignResult) {
+) (result utils.TssResult) {
 	if err := log.SetLogLevel("tss-lib", "info"); err != nil {
 		common.Logger.Errorf("set log level, err: %s", err.Error())
 		result.Err = fmt.Sprintf("set log level, err: %s", err.Error())

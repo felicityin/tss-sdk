@@ -5,10 +5,11 @@ import (
 	"fmt"
 
 	"tss-sdk/tss/common"
+	"tss-sdk/tss/protocols/utils"
 	"tss-sdk/tss/tss"
 )
 
-func KeygenRound2Exec(key string) (result KeygenExecResult) {
+func KeygenRound2Exec(key string) (result utils.TssExecResult) {
 	round, ok := Parties[key]
 	if !ok {
 		common.Logger.Errorf("party not found: %s", key)
@@ -58,7 +59,7 @@ func KeygenRound2Exec(key string) (result KeygenExecResult) {
 	return result
 }
 
-func KeygenRound2Accept(key string, from int, msgWireBytes string) (result KeygenResult) {
+func KeygenRound2Accept(key string, from int, msgWireBytes string) (result utils.TssResult) {
 	party, ok := Parties[key]
 	if !ok {
 		common.Logger.Errorf("party not found: %s", key)
@@ -88,7 +89,7 @@ func KeygenRound2Accept(key string, from int, msgWireBytes string) (result Keyge
 	return
 }
 
-func KeygenRound2Finish(key string) (result KeygenResult) {
+func KeygenRound2Finish(key string) (result utils.TssResult) {
 	party, ok := Parties[key]
 	if !ok {
 		common.Logger.Errorf("party not found: %s", key)

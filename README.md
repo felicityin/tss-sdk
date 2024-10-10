@@ -13,6 +13,8 @@ go get golang.org/x/mobile/bind
 # Build
 
 ```
+cd export
+
 gomobile init
 
 gomobile bind -target=android .

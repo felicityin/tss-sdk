@@ -5,16 +5,14 @@ import (
 	"fmt"
 	"math/big"
 
+	"github.com/ipfs/go-log"
+
 	"tss-sdk/tss/common"
 	"tss-sdk/tss/crypto/paillier"
 	"tss-sdk/tss/crypto/prmproof"
+	"tss-sdk/tss/protocols/utils"
 	"tss-sdk/tss/tss"
 )
-
-// Implements Party
-// Implements Stringer
-var _ tss.Party = (*LocalParty)(nil)
-var _ fmt.Stringer = (*LocalParty)(nil)
 
 type (
 	LocalParty struct {
@@ -22,21 +20,25 @@ type (
 		params *tss.Parameters
 
 		temp localTempData
-		data LocalPartySaveData
+		save LocalPartySaveData
 
-		// outbound messaging
-		out chan<- tss.Message
-		end chan<- *LocalPartySaveData
+		number int
+		ok     []bool
 	}
 
 	localMessageStore struct {
 		auxRound1Messages,
 		auxRound2Messages,
-		auxRound3Messages []tss.ParsedMessage
+		auxRound3Messages [][]byte // msg.WireBytes()
+	}
+
+	sendMessageStore struct {
+		auxRound3Messages [][]byte // msg.WireBytes()
 	}
 
 	localTempData struct {
 		localMessageStore
+		send sendMessageStore
 
 		prmProof *prmproof.RingPederssenParameterMessage
 
@@ -52,94 +54,84 @@ type (
 	}
 )
 
+var Parties = map[string]*LocalParty{}
+
 // Exported, used in `tss` client
 func NewLocalParty(
-	params *tss.Parameters,
-	out chan<- tss.Message,
-	end chan<- *LocalPartySaveData,
-) tss.Party {
-	partyCount := params.PartyCount()
-	data := NewLocalPartySaveData(partyCount)
+	key string,
+	partyIndex int,
+	partyCount int,
+	pIDs []string,
+) (result utils.TssResult) {
+	if err := log.SetLogLevel("tss-lib", "info"); err != nil {
+		common.Logger.Errorf("set log level, err: %s", err.Error())
+		result.Err = fmt.Sprintf("set log level, err: %s", err.Error())
+		return
+	}
+
+	uIds := make(tss.UnSortedPartyIDs, 0, partyCount)
+	for i := 0; i < partyCount; i++ {
+		pId, _ := new(big.Int).SetString(pIDs[i], 10)
+		common.Logger.Infof("id: %d", pId)
+		uIds = append(uIds, tss.NewPartyID(fmt.Sprintf("%d", i), fmt.Sprintf("m_%d", i), pId))
+	}
+	ids := tss.SortPartyIDs(uIds)
+
+	p2pCtx := tss.NewPeerContext(ids)
+	params := tss.NewParameters(nil, p2pCtx, ids[partyIndex], partyCount, partyCount)
+
 	p := &LocalParty{
 		BaseParty: new(tss.BaseParty),
 		params:    params,
 		temp:      localTempData{},
-		data:      data,
-		out:       out,
-		end:       end,
+		save:      NewLocalPartySaveData(partyCount),
+		ok:        make([]bool, partyCount),
 	}
 
 	// msgs init
-	p.temp.auxRound1Messages = make([]tss.ParsedMessage, partyCount)
-	p.temp.auxRound2Messages = make([]tss.ParsedMessage, partyCount)
-	p.temp.auxRound3Messages = make([]tss.ParsedMessage, partyCount)
+	p.temp.auxRound1Messages = make([][]byte, partyCount)
+	p.temp.auxRound2Messages = make([][]byte, partyCount)
+	p.temp.auxRound3Messages = make([][]byte, partyCount)
+	p.temp.send.auxRound3Messages = make([][]byte, partyCount)
 
 	// temp data init
 	p.temp.V = make([][]byte, partyCount)
-	return p
+
+	Parties[key] = p
+	result.Ok = true
+	return
+}
+
+func RemoveAuxParty(key string) bool {
+	if _, ok := Parties[key]; !ok {
+		return false
+	}
+	delete(Parties, key)
+	return true
+}
+
+func GetParty(key string) (*LocalParty, error) {
+	party, ok := Parties[key]
+	if !ok {
+		err := fmt.Errorf("party not found: %s", key)
+		common.Logger.Errorf("%s", err.Error())
+		return nil, err
+	}
+	return party, nil
 }
 
 func (p *LocalParty) PaillierSK() *paillier.PrivateKey {
-	return p.data.PaillierSK
+	return p.save.PaillierSK
 }
 
 func (p *LocalParty) SetPaillierSK(sk *paillier.PrivateKey) {
-	p.data.PaillierSK = sk
+	p.save.PaillierSK = sk
 }
 
-func (p *LocalParty) FirstRound() tss.Round {
-	return newRound1(p.params, &p.data, &p.temp, p.out, p.end)
-}
-
-func (p *LocalParty) Start() *tss.Error {
-	return tss.BaseStart(p, TaskName)
-}
-
-func (p *LocalParty) Update(msg tss.ParsedMessage) (ok bool, err *tss.Error) {
-	return tss.BaseUpdate(p, msg, TaskName)
-}
-
-func (p *LocalParty) UpdateFromBytes(wireBytes []byte, from *tss.PartyID, isBroadcast bool) (bool, *tss.Error) {
-	msg, err := tss.ParseWireMessage(wireBytes, from, isBroadcast)
-	if err != nil {
-		return false, p.WrapError(err)
+func (p *LocalParty) resetOK() {
+	for j := range p.ok {
+		p.ok[j] = false
 	}
-	return p.Update(msg)
-}
-
-func (p *LocalParty) ValidateMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
-	if ok, err := p.BaseParty.ValidateMessage(msg); !ok || err != nil {
-		return ok, err
-	}
-	// check that the message's "from index" will fit into the array
-	if maxFromIdx := p.params.PartyCount() - 1; maxFromIdx < msg.GetFrom().Index {
-		return false, p.WrapError(fmt.Errorf("received msg with a sender index too great (%d <= %d)",
-			p.params.PartyCount(), msg.GetFrom().Index), msg.GetFrom())
-	}
-	return true, nil
-}
-
-func (p *LocalParty) StoreMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
-	// ValidateBasic is cheap; double-check the message here in case the public StoreMessage was called externally
-	if ok, err := p.ValidateMessage(msg); !ok || err != nil {
-		return ok, err
-	}
-	fromPIdx := msg.GetFrom().Index
-
-	// switch/case is necessary to store any messages beyond current round
-	// this does not handle message replays. we expect the caller to apply replay and spoofing protection.
-	switch msg.Content().(type) {
-	case *AuxRound1Message:
-		p.temp.auxRound1Messages[fromPIdx] = msg
-	case *AuxRound2Message:
-		p.temp.auxRound2Messages[fromPIdx] = msg
-	case *AuxRound3Message:
-		p.temp.auxRound3Messages[fromPIdx] = msg
-	default: // unrecognised message, just ignore!
-		common.Logger.Warnf("unrecognised message ignored: %v", msg)
-		return false, nil
-	}
-	return true, nil
 }
 
 // recovers a party's original index in the set of parties during keygen
@@ -165,4 +157,8 @@ func (p *LocalParty) PartyID() *tss.PartyID {
 
 func (p *LocalParty) String() string {
 	return fmt.Sprintf("id: %s, %s", p.PartyID(), p.BaseParty.String())
+}
+
+func (p *LocalParty) getSSID() ([]byte, error) {
+	return []byte("auxiliary"), nil
 }

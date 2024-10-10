@@ -11,10 +11,11 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"tss-sdk/tss/common"
+	"tss-sdk/tss/protocols/utils"
 	"tss-sdk/tss/tss"
 )
 
-func OnsignRound2Exec(key string) (result OnsignExecResult) {
+func OnsignRound2Exec(key string) (result utils.TssExecResult) {
 	round, ok := SignParties[key]
 	if !ok {
 		common.Logger.Errorf("party not found: %s", key)
@@ -162,7 +163,7 @@ func OnsignRound2Exec(key string) (result OnsignExecResult) {
 	return result
 }
 
-func OnSignRound2MsgAccept(key string, from int, msgWireBytes string) (result OnsignResult) {
+func OnSignRound2MsgAccept(key string, from int, msgWireBytes string) (result utils.TssResult) {
 	party, ok := SignParties[key]
 	if !ok {
 		common.Logger.Errorf("party not found: %s", key)
@@ -193,7 +194,7 @@ func OnSignRound2MsgAccept(key string, from int, msgWireBytes string) (result On
 	return
 }
 
-func OnSignRound2Finish(key string) (result OnsignResult) {
+func OnSignRound2Finish(key string) (result utils.TssResult) {
 	party, ok := SignParties[key]
 	if !ok {
 		common.Logger.Errorf("party not found: %s", key)

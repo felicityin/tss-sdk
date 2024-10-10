@@ -10,6 +10,7 @@ import (
 	"tss-sdk/tss/common"
 	"tss-sdk/tss/crypto"
 	save "tss-sdk/tss/protocols/cggmp/keygen"
+	"tss-sdk/tss/protocols/utils"
 	"tss-sdk/tss/tss"
 )
 
@@ -70,28 +71,33 @@ type KeygenExecResult struct {
 	MsgWireBytes []byte `json:"data"`
 }
 
-type KeygenResult struct {
-	Ok  bool   `json:"ok"`
-	Err string `json:"error"`
-}
-
 var Parties = map[string]*LocalParty{}
 
 // Exported, used in `tss` client
 func NewLocalParty(
+	algo string, // ecdsa or eddsa
 	key string,
 	partyIndex int,
 	partyCount int,
 	pIDs []string,
-	rootPrivKey string,
-	chainCode string,
-) (result KeygenResult) {
+	rootPrivKey string, // hex string
+	chainCode string, // hex string
+) (result utils.TssResult) {
 	if err := log.SetLogLevel("tss-lib", "info"); err != nil {
 		common.Logger.Errorf("set log level, err: %s", err.Error())
 		result.Err = fmt.Sprintf("set log level, err: %s", err.Error())
 		return
 	}
-	tss.SetCurve(tss.Edwards())
+
+	if algo == "ecdsa" {
+		tss.SetCurve(tss.S256())
+	} else if algo == "eddsa" {
+		tss.SetCurve(tss.Edwards())
+	} else {
+		common.Logger.Errorf("unknown alog: %s", algo)
+		result.Err = fmt.Sprintf("unknown alog: %s", algo)
+		return
+	}
 
 	uIds := make(tss.UnSortedPartyIDs, 0, partyCount)
 	for i := 0; i < partyCount; i++ {
@@ -102,7 +108,17 @@ func NewLocalParty(
 	ids := tss.SortPartyIDs(uIds)
 
 	p2pCtx := tss.NewPeerContext(ids)
-	params := tss.NewParameters(tss.Edwards(), p2pCtx, ids[partyIndex], partyCount, partyCount)
+	var params *tss.Parameters
+	if algo == "ecdsa" {
+		params = tss.NewParameters(tss.S256(), p2pCtx, ids[partyIndex], partyCount, partyCount)
+	} else if algo == "eddsa" {
+		params = tss.NewParameters(tss.Edwards(), p2pCtx, ids[partyIndex], partyCount, partyCount)
+	} else {
+		common.Logger.Errorf("unknown alog: %s", algo)
+		result.Err = fmt.Sprintf("unknown alog: %s", algo)
+		return
+	}
+
 	data := save.NewLocalPartySaveData(partyCount)
 
 	privkey, err := hex.DecodeString(rootPrivKey)
