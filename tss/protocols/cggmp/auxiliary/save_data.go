@@ -2,6 +2,7 @@ package auxiliary
 
 import (
 	"encoding/hex"
+	"fmt"
 	"math/big"
 
 	"tss-sdk/tss/common"
@@ -37,21 +38,23 @@ func NewLocalPartySaveData(partyCount int) (saveData LocalPartySaveData) {
 }
 
 // BuildLocalSaveDataSubset re-creates the LocalPartySaveData to contain data for only the list of signing parties.
-func BuildLocalSaveDataSubset(sourceData LocalPartySaveData, sortedIDs tss.SortedPartyIDs) LocalPartySaveData {
+func BuildLocalSaveDataSubset(sourceData LocalPartySaveData, sortedIDs tss.SortedPartyIDs) (newData LocalPartySaveData, err error) {
 	keysToIndices := make(map[string]int, len(sourceData.Ks))
 	for j, kj := range sourceData.Ks {
 		keysToIndices[hex.EncodeToString(kj.Bytes())] = j
 	}
-	newData := NewLocalPartySaveData(sortedIDs.Len())
+	newData = NewLocalPartySaveData(sortedIDs.Len())
 	newData.LocalSecrets = sourceData.LocalSecrets
 	for j, id := range sortedIDs {
 		savedIdx, ok := keysToIndices[hex.EncodeToString(id.Key)]
 		if !ok {
 			common.Logger.Errorf("BuildLocalSaveDataSubset: unable to find a signer party in the local save data: %s", hex.EncodeToString(id.Key))
+			err = fmt.Errorf("unable to find a signer party in the keygen local save data, id.Key: %s", hex.EncodeToString(id.Key))
+			return
 		}
 		newData.Ks[j] = sourceData.Ks[savedIdx]
 		newData.PaillierPKs[j] = sourceData.PaillierPKs[savedIdx]
 		newData.PedersenPKs[j] = sourceData.PedersenPKs[savedIdx]
 	}
-	return newData
+	return newData, nil
 }

@@ -2,20 +2,24 @@ package sign
 
 import (
 	"crypto/ecdsa"
-	"errors"
+	"encoding/json"
 	"fmt"
 	"math/big"
 
 	"tss-sdk/tss/common"
+	"tss-sdk/tss/protocols/utils"
 	"tss-sdk/tss/tss"
 )
 
-func (round *finalization) Start() *tss.Error {
-	if round.started {
-		return round.WrapError(errors.New("round already started"))
+func OnsignRound5Exec(key string) (result utils.TssExecResult) {
+	round, ok := SignParties[key]
+	if !ok {
+		common.Logger.Errorf("party not found: %s", key)
+		result.Err = fmt.Sprintf("party not found: %s", key)
+		return
 	}
+
 	round.number = 5
-	round.started = true
 	round.resetOK()
 
 	Pi := round.PartyID()
@@ -25,21 +29,27 @@ func (round *finalization) Start() *tss.Error {
 
 	sumS := new(big.Int).Set(round.temp.si)
 
-	for j := range round.Parties().IDs() {
+	for j := range round.params.Parties().IDs() {
 		round.ok[j] = true
 		if j == i {
 			continue
 		}
 
-		r4msg := round.temp.signRound4Messages[j].Content().(*SignRound4Message)
+		pMsg, err := tss.ParseWireMsg(round.temp.signRound4Messages[j])
+		if err != nil {
+			common.Logger.Errorf("msg error, parse wire r3msg fail, err:%s", err.Error())
+			result.Err = fmt.Sprintf("msg error, parse wire r3msg fail, err:%s", err.Error())
+			return
+		}
+		r4msg := pMsg.Content().(*SignRound4Message)
 
 		sumS.Add(sumS, r4msg.UnmarshalS())
-		sumS.Mod(sumS, round.EC().Params().N)
+		sumS.Mod(sumS, round.params.EC().Params().N)
 	}
 
 	recid := 0
 	// byte v = if(R.X > curve.N) then 2 else 0) | (if R.Y.IsEven then 0 else 1);
-	if round.temp.R.X().Cmp(round.Params().EC().Params().N) > 0 {
+	if round.temp.R.X().Cmp(round.params.EC().Params().N) > 0 {
 		recid = 2
 	}
 	if round.temp.R.Y().Bit(0) != 0 {
@@ -50,14 +60,14 @@ func (round *finalization) Start() *tss.Error {
 	// https://github.com/btcsuite/btcd/blob/c26ffa870fd817666a857af1bf6498fabba1ffe3/btcec/signature.go#L442-L444
 	// This is needed because of tendermint checks here:
 	// https://github.com/tendermint/tendermint/blob/d9481e3648450cb99e15c6a070c1fb69aa0c255b/crypto/secp256k1/secp256k1_nocgo.go#L43-L47
-	secp256k1halfN := new(big.Int).Rsh(round.Params().EC().Params().N, 1)
+	secp256k1halfN := new(big.Int).Rsh(round.params.EC().Params().N, 1)
 	if sumS.Cmp(secp256k1halfN) > 0 {
-		sumS.Sub(round.Params().EC().Params().N, sumS)
+		sumS.Sub(round.params.EC().Params().N, sumS)
 		recid ^= 1
 	}
 
 	// save the signature for final output
-	bitSizeInBytes := round.Params().EC().Params().BitSize / 8
+	bitSizeInBytes := round.params.EC().Params().BitSize / 8
 	round.data.R = padToLengthBytesInPlace(round.temp.R.X().Bytes(), bitSizeInBytes)
 	round.data.S = padToLengthBytesInPlace(sumS.Bytes(), bitSizeInBytes)
 	round.data.Signature = append(round.data.R, round.data.S...)
@@ -71,32 +81,26 @@ func (round *finalization) Start() *tss.Error {
 	}
 
 	pk := ecdsa.PublicKey{
-		Curve: round.Params().EC(),
+		Curve: round.params.EC(),
 		X:     round.key.Pubkey.X(),
 		Y:     round.key.Pubkey.Y(),
 	}
 
-	ok := ecdsa.Verify(&pk, round.data.M, round.temp.R.X(), sumS)
-	if !ok {
-		return round.WrapError(fmt.Errorf("signature verification failed"))
+	if ok := ecdsa.Verify(&pk, round.data.M, round.temp.R.X(), sumS); !ok {
+		result.Err = fmt.Sprintf("signature verification failed")
+		return
 	}
 
-	round.end <- round.data
-	return nil
-}
+	saveBytes, err := json.Marshal(round.data)
+	if err != nil {
+		common.Logger.Errorf("round_final save err: %s", err.Error())
+		result.Err = fmt.Sprintf("round_final save err: %s", err.Error())
+		return
+	}
 
-func (round *finalization) CanAccept(msg tss.ParsedMessage) bool {
-	// not expecting any incoming messages in this round
-	return false
-}
-
-func (round *finalization) Update() (bool, *tss.Error) {
-	// not expecting any incoming messages in this round
-	return false, nil
-}
-
-func (round *finalization) NextRound() tss.Round {
-	return nil // finished!
+	result.Ok = true
+	result.MsgWireBytes = saveBytes
+	return result
 }
 
 func padToLengthBytesInPlace(src []byte, length int) []byte {

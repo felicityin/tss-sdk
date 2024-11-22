@@ -1,42 +1,28 @@
 package sign
 
 import (
-	"errors"
+	"encoding/base64"
+	"fmt"
 	"math/big"
 
 	"tss-sdk/tss/common"
 	"tss-sdk/tss/crypto"
 	"tss-sdk/tss/crypto/encproof"
-	"tss-sdk/tss/protocols/cggmp/auxiliary"
-	"tss-sdk/tss/protocols/cggmp/keygen"
+	"tss-sdk/tss/protocols/utils"
 	"tss-sdk/tss/tss"
 )
 
 var ProofParameter = crypto.NewProofConfig(tss.S256().Params().N)
 
-// round 1 represents round 1 of the signing part of the EDDSA TSS spec
-func newRound1(
-	isThreshold bool,
-	params *tss.Parameters,
-	key *keygen.LocalPartySaveData,
-	aux *auxiliary.LocalPartySaveData,
-	data *common.SignatureData,
-	temp *localTempData,
-	out chan<- tss.Message,
-	end chan<- *common.SignatureData,
-) tss.Round {
-	return &round1{
-		&base{params, isThreshold, key, aux, data, temp, out, end, make([]bool, len(params.Parties().IDs())), false, 1},
-	}
-}
-
-func (round *round1) Start() *tss.Error {
-	if round.started {
-		return round.WrapError(errors.New("round already started"))
+func OnSignRound1Exec(key string) (result utils.TssExecResult) {
+	round, ok := SignParties[key]
+	if !ok {
+		common.Logger.Errorf("party not found: %s", key)
+		result.Err = fmt.Sprintf("party not found: %s", key)
+		return
 	}
 
 	round.number = 1
-	round.started = true
 	round.resetOK()
 
 	Pi := round.PartyID()
@@ -47,41 +33,48 @@ func (round *round1) Start() *tss.Error {
 	var err error
 	round.temp.ssid, err = round.getSSID()
 	if err != nil {
-		return round.WrapError(err)
+		return
 	}
 
 	// k, gamma in F_q
-	round.temp.k = common.GetRandomPositiveInt(round.Rand(), round.EC().Params().N)
-	round.temp.gamma = common.GetRandomPositiveInt(round.Rand(), round.EC().Params().N)
+	round.temp.k = common.GetRandomPositiveInt(round.params.Rand(), round.params.EC().Params().N)
+	round.temp.gamma = common.GetRandomPositiveInt(round.params.Rand(), round.params.EC().Params().N)
 	common.Logger.Debugf("P[%d]: calc ki, gammai", i)
 
 	// Ki = enc(k, ρ), Gammai = enc(gamma, mu)
 	round.temp.kCiphertexts[i], round.temp.rho, err = round.aux.PaillierPKs[i].EncryptAndReturnRandomness(
-		round.Rand(),
+		round.params.Rand(),
 		round.temp.k,
 	)
 	if err != nil {
 		common.Logger.Errorf("P[%d]: create enc proof failed: %s", i, err)
-		return round.WrapError(err)
+		result.Err = fmt.Sprintf("P[%d]: create enc proof failed: %s", i, err)
+		return
 	}
 	round.temp.gammaCiphertexts[i], round.temp.mu, err = round.aux.PaillierPKs[i].EncryptAndReturnRandomness(
-		round.Rand(),
+		round.params.Rand(),
 		round.temp.gamma,
 	)
 	if err != nil {
 		common.Logger.Errorf("P[%d]: create enc proof failed: %s", i, err)
-		return round.WrapError(err)
+		result.Err = fmt.Sprintf("P[%d]: create enc proof failed: %s", i, err)
+		return
 	}
 	common.Logger.Debugf("P[%d]: calc kCiphertext, gammaCiphertext done", i)
 
 	// broadcast Ki, Gammai
 	common.Logger.Debugf("P[%d]: broadcast Ki", i)
 	r1msg1 := NewSignRound1Message1(round.PartyID(), round.temp.kCiphertexts[i], round.temp.gammaCiphertexts[i])
-	round.temp.signRound1Message1s[i] = r1msg1
-	round.out <- r1msg1
+	msgWireBytes, _, err := r1msg1.WireBytes()
+	if err != nil {
+		common.Logger.Errorf("get r1msg1 wire bytes error: %s", key)
+		result.Err = fmt.Sprintf("get r1msg1 wire bytes error: %s", key)
+		return
+	}
+	round.temp.signRound1Message1s[i] = msgWireBytes
 
 	// p2p send enc proof to Pj
-	for j, Pj := range round.Parties().IDs() {
+	for j, Pj := range round.params.Parties().IDs() {
 		if j == i {
 			round.ok[j] = true
 			continue
@@ -95,7 +88,8 @@ func (round *round1) Start() *tss.Error {
 		)
 		if err != nil {
 			common.Logger.Errorf("create enc proof failed: %s, party: %d", err, j)
-			return round.WrapError(errors.New("create enc proof failed"))
+			result.Err = fmt.Sprintf("create enc proof failed: %s, party: %d", err, j)
+			return
 		}
 		common.Logger.Debugf("P[%d]: calc enc proof", i)
 
@@ -104,43 +98,83 @@ func (round *round1) Start() *tss.Error {
 		if err != nil {
 			round.WrapError(err, Pj)
 		}
-		round.out <- r1msg2
+		msgWireBytes, _, err := r1msg2.WireBytes()
+		if err != nil {
+			common.Logger.Errorf("get r1msg2 wire bytes error: %s", key)
+			result.Err = fmt.Sprintf("get r1msg2 wire bytes error: %s", key)
+			return
+		}
+		round.temp.send.signRound1Message2s[j] = msgWireBytes
+		if j == i {
+			round.temp.signRound1Message2s[i] = msgWireBytes
+		}
 	}
 
-	return nil
+	result.Ok = true
+	result.MsgWireBytes = round.temp.signRound1Message1s[i]
+	return result
 }
 
-func (round *round1) Update() (bool, *tss.Error) {
-	ret := true
-	for j, msg := range round.temp.signRound1Message1s {
-		if round.ok[j] {
-			continue
-		}
-		if msg == nil || !round.CanAccept(msg) {
-			ret = false
-			continue
-		}
-		msg2 := round.temp.signRound1Message2s[j]
-		if msg2 == nil || !round.CanAccept(msg2) {
-			ret = false
-			continue
-		}
-		round.ok[j] = true
+func GetRound1Msg2(key string, to int) (result utils.TssExecResult) {
+	party, ok := SignParties[key]
+	if !ok {
+		common.Logger.Errorf("party not found: %s", key)
+		result.Err = fmt.Sprintf("party not found: %s", key)
+		return
 	}
-	return ret, nil
+	result.Ok = true
+	result.MsgWireBytes = party.temp.send.signRound1Message2s[to]
+	return
 }
 
-func (round *round1) CanAccept(msg tss.ParsedMessage) bool {
+func OnSignRound1MsgAccept(key string, from int, msgWireBytes string) (result utils.TssResult) {
+	party, ok := SignParties[key]
+	if !ok {
+		common.Logger.Errorf("party not found: %s", key)
+		result.Err = fmt.Sprintf("party not found: %s", key)
+		return
+	}
+
+	rMsgBytes, err := base64.StdEncoding.DecodeString(msgWireBytes)
+	if err != nil {
+		common.Logger.Errorf("msg error, r1msg1 base64 decode fail, err:%s", err.Error())
+		result.Err = fmt.Sprintf("msg error, r1msg1 base64 decode fail, err:%s", err.Error())
+		return
+	}
+
+	msg, err := tss.ParseWireMsg(rMsgBytes)
+	if err != nil {
+		common.Logger.Errorf("msg error, parse wire r1msg1 fail, err:%s", err.Error())
+		result.Err = fmt.Sprintf("msg error, parse wire r1msg1 fail, err:%s", err.Error())
+		return
+	}
+
 	if _, ok := msg.Content().(*SignRound1Message1); ok {
-		return msg.IsBroadcast()
+		party.temp.signRound1Message1s[from] = rMsgBytes
+	} else if _, ok := msg.Content().(*SignRound1Message2); ok {
+		party.temp.signRound1Message2s[from] = rMsgBytes
+	} else {
+		result.Err = "not SignRound1Message"
+		return
 	}
-	if _, ok := msg.Content().(*SignRound1Message2); ok {
-		return !msg.IsBroadcast()
-	}
-	return false
+	result.Ok = true
+	return
 }
 
-func (round *round1) NextRound() tss.Round {
-	round.started = false
-	return &round2{round}
+func OnSignRound1Finish(key string) (result utils.TssResult) {
+	party, ok := SignParties[key]
+	if !ok {
+		common.Logger.Errorf("party not found: %s", key)
+		result.Err = fmt.Sprintf("party not found: %s", key)
+		return
+	}
+
+	for j, msg := range party.temp.signRound1Message2s {
+		if len(msg) == 0 {
+			result.Err = fmt.Sprintf("msg is null: %d", j)
+			return
+		}
+	}
+	result.Ok = true
+	return
 }

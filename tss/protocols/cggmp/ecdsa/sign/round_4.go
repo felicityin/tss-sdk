@@ -1,22 +1,26 @@
 package sign
 
 import (
+	"encoding/base64"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"math/big"
 
 	"tss-sdk/tss/common"
 	"tss-sdk/tss/crypto"
+	"tss-sdk/tss/protocols/utils"
 	"tss-sdk/tss/tss"
 )
 
-func (round *round4) Start() *tss.Error {
-	if round.started {
-		return round.WrapError(errors.New("round already started"))
+func OnsignRound4Exec(key string) (result utils.TssExecResult) {
+	round, ok := SignParties[key]
+	if !ok {
+		common.Logger.Errorf("party not found: %s", key)
+		result.Err = fmt.Sprintf("party not found: %s", key)
+		return
 	}
+
 	round.number = 4
-	round.started = true
 	round.resetOK()
 
 	Pi := round.PartyID()
@@ -27,82 +31,123 @@ func (round *round4) Start() *tss.Error {
 	sumDelta := new(big.Int).Set(round.temp.delta)
 	sumBigDelta := round.temp.Delta
 
-	for j, Pj := range round.Parties().IDs() {
+	for j := range round.params.Parties().IDs() {
 		if j == i {
 			continue
 		}
 		contextJ := append(round.temp.ssid, big.NewInt(int64(j)).Bytes()...)
-		r3msg := round.temp.signRound3Messages[j].Content().(*SignRound3Message)
+
+		pMsg, err := tss.ParseWireMsg(round.temp.signRound3Messages[j])
+		if err != nil {
+			common.Logger.Errorf("msg error, parse wire r3msg fail, err:%s", err.Error())
+			result.Err = fmt.Sprintf("msg error, parse wire r3msg fail, err:%s", err.Error())
+			return
+		}
+		r3msg := pMsg.Content().(*SignRound3Message)
 
 		Delta, err := r3msg.UnmarshalBigDelta()
 		if err != nil {
-			return round.WrapError(fmt.Errorf("[j: %d] unmarshal big delta err: %s", j, err.Error()))
+			result.Err = fmt.Sprintf("[j: %d] unmarshal big delta err: %s", j, err.Error())
+			return
 		}
 
 		logProof, err := r3msg.UnmarshalLogProof()
 		if err != nil {
-			return round.WrapError(fmt.Errorf("[j: %d] unmarshal log proof err: %s", j, err.Error()))
+			result.Err = fmt.Sprintf("[j: %d] unmarshal log proof err: %s", j, err.Error())
+			return
 		}
 		if err = logProof.Verify(
 			ProofParameter, contextJ, round.temp.kCiphertexts[j], round.aux.PaillierPKs[j].N,
 			round.aux.PedersenPKs[i], Delta, round.temp.sumGamma,
 		); err != nil {
 			common.Logger.Errorf("[j: %d] verify log proof failed: %s, party: %d", j, err)
-			return round.WrapError(fmt.Errorf("[j: %d] verify log proof failed: %s", j, err))
+			result.Err = fmt.Sprintf("[j: %d] verify log proof failed: %s, party: %d", j, err)
+			return
 		}
 
 		sumDelta.Add(sumDelta, r3msg.UnmarshalDelta())
 
 		sumBigDelta, err = sumBigDelta.Add(Delta)
 		if err != nil {
-			return round.WrapError(err, Pj)
+			result.Err = fmt.Sprintf("sumBigDelta.Add err: %s", err)
+			return
 		}
 	}
 
-	gDelta := crypto.ScalarBaseMult(round.EC(), sumDelta)
+	gDelta := crypto.ScalarBaseMult(round.params.EC(), sumDelta)
 
 	if hex.EncodeToString(gDelta.X().Bytes()) != hex.EncodeToString(sumBigDelta.X().Bytes()) ||
 		hex.EncodeToString(gDelta.Y().Bytes()) != hex.EncodeToString(sumBigDelta.Y().Bytes()) {
-		return round.WrapError(fmt.Errorf("verify delta failed"))
+		result.Err = "verify delta failed"
+		return
 	}
 
-	round.temp.R = round.temp.sumGamma.ScalarMult(new(big.Int).ModInverse(sumDelta, round.EC().Params().N))
+	round.temp.R = round.temp.sumGamma.ScalarMult(new(big.Int).ModInverse(sumDelta, round.params.EC().Params().N))
 
-	modN := common.ModInt(round.EC().Params().N)
+	modN := common.ModInt(round.params.EC().Params().N)
 	round.temp.si = modN.Add(modN.Mul(round.temp.k, round.temp.msg), modN.Mul(round.temp.R.X(), round.temp.chi))
 
 	// broadcast sigma
 	common.Logger.Debugf("P[%d]: broadcast sigma", i)
 	r4msg := NewSignRound4Message(round.PartyID(), round.temp.si)
-	round.temp.signRound4Messages[i] = r4msg
-	round.out <- r4msg
-
-	return nil
-}
-
-func (round *round4) Update() (bool, *tss.Error) {
-	ret := true
-	for j, msg := range round.temp.signRound4Messages {
-		if round.ok[j] {
-			continue
-		}
-		if msg == nil || !round.CanAccept(msg) {
-			ret = false
-			continue
-		}
-		round.ok[j] = true
+	msgWireBytes, _, err := r4msg.WireBytes()
+	if err != nil {
+		common.Logger.Errorf("get r4msg wire bytes error: %s", key)
+		result.Err = fmt.Sprintf("get r4msg wire bytes error: %s", key)
+		return
 	}
-	return ret, nil
+	round.temp.signRound4Messages[i] = msgWireBytes
+
+	result.Ok = true
+	result.MsgWireBytes = msgWireBytes
+	return result
 }
 
-func (round *round4) CanAccept(msg tss.ParsedMessage) bool {
-	if _, ok := msg.Content().(*SignRound4Message); ok {
-		return msg.IsBroadcast()
+func OnSignRound4MsgAccept(key string, from int, msgWireBytes string) (result utils.TssResult) {
+	party, ok := SignParties[key]
+	if !ok {
+		common.Logger.Errorf("party not found: %s", key)
+		result.Err = fmt.Sprintf("party not found: %s", key)
+		return
 	}
-	return false
+
+	rMsgBytes, err := base64.StdEncoding.DecodeString(msgWireBytes)
+	if err != nil {
+		common.Logger.Errorf("msg error, r3msg base64 decode fail, err:%s", err.Error())
+		result.Err = fmt.Sprintf("msg error, r3msg base64 decode fail, err:%s", err.Error())
+		return
+	}
+	party.temp.signRound3Messages[from] = rMsgBytes
+
+	msg, err := tss.ParseWireMsg(rMsgBytes)
+	if err != nil {
+		common.Logger.Errorf("msg error, parse wire r4msg fail, err:%s", err.Error())
+		result.Err = fmt.Sprintf("msg error, parse wire r4msg fail, err:%s", err.Error())
+		return
+	}
+	if _, ok := msg.Content().(*SignRound4Message); !ok {
+		result.Err = "not SignRound3Message"
+		return
+	}
+
+	result.Ok = true
+	return
 }
 
-func (round *round4) NextRound() tss.Round {
-	round.started = false
-	return &finalization{round}
+func OnSignRound4Finish(key string) (result utils.TssResult) {
+	party, ok := SignParties[key]
+	if !ok {
+		common.Logger.Errorf("party not found: %s", key)
+		result.Err = fmt.Sprintf("party not found: %s", key)
+		return
+	}
+
+	for j, msg := range party.temp.signRound4Messages {
+		if len(msg) == 0 {
+			result.Err = fmt.Sprintf("r4msg is null: %d", j)
+			return
+		}
+	}
+	result.Ok = true
+	return
 }

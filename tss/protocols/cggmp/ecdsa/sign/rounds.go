@@ -25,29 +25,6 @@ type (
 		started     bool
 		number      int
 	}
-	round1 struct {
-		*base
-	}
-	round2 struct {
-		*round1
-	}
-	round3 struct {
-		*round2
-	}
-	round4 struct {
-		*round3
-	}
-	finalization struct {
-		*round4
-	}
-)
-
-var (
-	_ tss.Round = (*round1)(nil)
-	_ tss.Round = (*round2)(nil)
-	_ tss.Round = (*round3)(nil)
-	_ tss.Round = (*round4)(nil)
-	_ tss.Round = (*finalization)(nil)
 )
 
 // ----- //
