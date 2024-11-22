@@ -32,7 +32,7 @@ type (
 
 	localMessageStore struct {
 		signRound1Messages,
-		signRound2Messages [][]byte // msg.WireBytes()
+		signRound2Messages []tss.ParsedMessage
 	}
 
 	localTempData struct {
@@ -132,8 +132,8 @@ func NewLocalParty(
 		ok:        make([]bool, partyCount),
 	}
 	// msgs init
-	p.temp.signRound1Messages = make([][]byte, partyCount)
-	p.temp.signRound2Messages = make([][]byte, partyCount)
+	p.temp.signRound1Messages = make([]tss.ParsedMessage, partyCount)
+	p.temp.signRound2Messages = make([]tss.ParsedMessage, partyCount)
 
 	// temp data init
 	m, err := hex.DecodeString(msg)

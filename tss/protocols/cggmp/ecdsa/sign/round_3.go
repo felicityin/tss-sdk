@@ -41,13 +41,7 @@ func OnsignRound3Exec(key string) (result utils.TssResult) {
 
 		contextJ := append(round.temp.ssid, big.NewInt(int64(j)).Bytes()...)
 
-		pMsg, err := tss.ParseWireMsg(round.temp.signRound2Messages[j])
-		if err != nil {
-			common.Logger.Errorf("msg error, parse wire r2msg fail, err:%s", err.Error())
-			result.Err = fmt.Sprintf("msg error, parse wire r2msg fail, err:%s", err.Error())
-			return
-		}
-		r2msg := pMsg.Content().(*SignRound2Message)
+		r2msg := round.temp.signRound2Messages[j].Content().(*SignRound2Message)
 
 		Gamma, err := r2msg.UnmarshalGamma()
 		if err != nil {
@@ -147,13 +141,7 @@ func OnsignRound3Exec(key string) (result utils.TssResult) {
 			continue
 		}
 
-		pMsg, err := tss.ParseWireMsg(round.temp.signRound2Messages[j])
-		if err != nil {
-			common.Logger.Errorf("msg error, parse wire msg fail, err:%s", err.Error())
-			result.Err = fmt.Sprintf("msg error, parse wire msg fail, err:%s", err.Error())
-			return
-		}
-		r2msg := pMsg.Content().(*SignRound2Message)
+		r2msg := round.temp.signRound2Messages[j].Content().(*SignRound2Message)
 
 		alpha, err := round.aux.PaillierSK.Decrypt(new(big.Int).SetBytes(r2msg.GetD()))
 		if err != nil {
@@ -213,7 +201,7 @@ func OnsignRound3Exec(key string) (result utils.TssResult) {
 		}
 		round.temp.send.signRound3Messages[j] = msgWireBytes
 		if j == i {
-			round.temp.signRound3Messages[i] = msgWireBytes
+			round.temp.signRound3Messages[i] = r3msg
 		}
 	}
 
@@ -247,7 +235,6 @@ func OnSignRound3MsgAccept(key string, from int, msgWireBytes string) (result ut
 		result.Err = fmt.Sprintf("msg error, r3msg base64 decode fail, err:%s", err.Error())
 		return
 	}
-	party.temp.signRound3Messages[from] = rMsgBytes
 
 	msg, err := tss.ParseWireMsg(rMsgBytes)
 	if err != nil {
@@ -261,6 +248,7 @@ func OnSignRound3MsgAccept(key string, from int, msgWireBytes string) (result ut
 	}
 
 	result.Ok = true
+	party.temp.signRound3Messages[from] = msg
 	return
 }
 
@@ -273,7 +261,10 @@ func OnSignRound3Finish(key string) (result utils.TssResult) {
 	}
 
 	for j, msg := range party.temp.signRound3Messages {
-		if len(msg) == 0 {
+		if j == party.PartyID().Index {
+			continue
+		}
+		if msg == nil {
 			result.Err = fmt.Sprintf("r3msg is null: %d", j)
 			return
 		}

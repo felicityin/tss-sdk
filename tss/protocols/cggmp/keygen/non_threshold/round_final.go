@@ -8,7 +8,6 @@ import (
 	"tss-sdk/tss/common"
 	"tss-sdk/tss/crypto/schnorr"
 	"tss-sdk/tss/protocols/utils"
-	"tss-sdk/tss/tss"
 )
 
 func KeygenRound4Exec(key string) (result utils.TssExecResult) {
@@ -45,14 +44,9 @@ func KeygenRound4Exec(key string) (result utils.TssExecResult) {
 
 		common.Logger.Debugf("round_4 get proof")
 
-		pMsg, err := tss.ParseWireMsg(round.temp.kgRound3Messages[j])
-		if err != nil {
-			common.Logger.Errorf("msg error, parse wire msg fail, err:%s", err.Error())
-			result.Err = fmt.Sprintf("msg error, parse wire msg fail, err:%s", err.Error())
-			return
-		}
+		r3msg := round.temp.kgRound3Messages[j].Content().(*KGRound3Message)
 
-		schProof := schnorr.Proof{Proof: pMsg.Content().(*KGRound3Message).UnmarshalSchProof()}
+		schProof := schnorr.Proof{Proof: r3msg.UnmarshalSchProof()}
 
 		common.Logger.Debugf("round_4 verify proof")
 

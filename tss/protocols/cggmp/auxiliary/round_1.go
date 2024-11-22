@@ -107,7 +107,7 @@ func AuxRound1Exec(key string) (result utils.TssExecResult) {
 		result.Err = err.Error()
 		return
 	}
-	round.temp.auxRound1Messages[i] = msgWireBytes
+	round.temp.auxRound1Messages[i] = msg
 
 	result.Ok = true
 	result.MsgWireBytes = msgWireBytes
@@ -121,12 +121,11 @@ func AuxRound1Accept(key string, from int, msgWireBytes string) (result utils.Ts
 		return
 	}
 
-	msgBytes, msg, err := utils.ParseRecvMsg(msgWireBytes)
+	msg, err := utils.ParseRecvMsg(msgWireBytes)
 	if err != nil {
 		result.Err = err.Error()
 		return
 	}
-	party.temp.auxRound1Messages[from] = msgBytes
 
 	if _, ok := msg.Content().(*AuxRound1Message); !ok {
 		err := fmt.Errorf("not AuxRound1Message")
@@ -135,6 +134,7 @@ func AuxRound1Accept(key string, from int, msgWireBytes string) (result utils.Ts
 		return
 	}
 	result.Ok = true
+	party.temp.auxRound1Messages[from] = msg
 	return
 }
 
@@ -149,7 +149,7 @@ func AuxRound1Finish(key string) (result utils.TssResult) {
 		if j == party.PartyID().Index {
 			continue
 		}
-		if len(msg) == 0 {
+		if msg == nil {
 			result.Err = fmt.Sprintf("msg is null: %d", j)
 			return
 		}

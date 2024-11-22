@@ -27,11 +27,6 @@ func AuxRound4Exec(key string) (result utils.TssExecResult) {
 
 		common.Logger.Debugf("round_4 get proof")
 
-		msg, err := utils.ParseWireMsg(msg, "AuxRound3Message")
-		if err != nil {
-			result.Err = err.Error()
-			return
-		}
 		r3msg := msg.Content().(*AuxRound3Message)
 
 		// Verify mod proof

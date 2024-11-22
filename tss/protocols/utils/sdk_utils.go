@@ -18,8 +18,8 @@ type TssResult struct {
 	Err string `json:"error"`
 }
 
-func ParseRecvMsg(msgWireBytes string) (msgBytes []byte, msg tss.ParsedMessage, err error) {
-	msgBytes, err = base64.StdEncoding.DecodeString(msgWireBytes)
+func ParseRecvMsg(msgWireBytes string) (msg tss.ParsedMessage, err error) {
+	msgBytes, err := base64.StdEncoding.DecodeString(msgWireBytes)
 	if err != nil {
 		err = fmt.Errorf("base64 decode msg err: %s", err.Error())
 		common.Logger.Errorf("%s", err.Error())
@@ -32,7 +32,7 @@ func ParseRecvMsg(msgWireBytes string) (msgBytes []byte, msg tss.ParsedMessage, 
 		common.Logger.Errorf("%s", err.Error())
 		return
 	}
-	return msgBytes, msg, nil
+	return msg, nil
 }
 
 func ParseWireMsg(msg []byte, name string) (tmsg tss.ParsedMessage, err error) {

@@ -26,20 +26,14 @@ func KeygenRound3Exec(key string) (result u.TssExecResult) {
 
 	i := round.PartyID().Index
 	common.Logger.Infof("party: %d, round_3 start", i)
+	var err error
 
 	for j, _ := range round.temp.kgRound2Messages {
 		if j == i {
 			continue
 		}
 
-		pMsg, err := tss.ParseWireMsg(round.temp.kgRound2Messages[j])
-		if err != nil {
-			common.Logger.Errorf("msg error, parse wire msg fail, err: %s, j: %d, bytes: %v", err.Error(), j, round.temp.kgRound2Messages[j])
-			result.Err = fmt.Sprintf("msg error, parse wire msg fail, err: %s, j: %d, bytes: %v", err.Error(), j, round.temp.kgRound2Messages[j])
-			return
-		}
-
-		r2msg := pMsg.Content().(*KGRound2Message)
+		r2msg := round.temp.kgRound2Messages[j].Content().(*KGRound2Message)
 
 		round.temp.payload[j], err = r2msg.UnmarshalPayload(round.params.EC())
 		if err != nil {
@@ -113,7 +107,7 @@ func KeygenRound3Exec(key string) (result u.TssExecResult) {
 		result.Err = fmt.Sprintf("get msg wire bytes error: %s", key)
 		return
 	}
-	round.temp.kgRound3Messages[i] = msgWireBytes
+	round.temp.kgRound3Messages[i] = msg
 
 	result.Ok = true
 	result.MsgWireBytes = msgWireBytes
@@ -134,7 +128,6 @@ func KeygenRound3Accept(key string, from int, msgWireBytes string) (result u.Tss
 		result.Err = fmt.Sprintf("msg error, msg base64 decode fail, err:%s", err.Error())
 		return
 	}
-	party.temp.kgRound3Messages[from] = rMsgBytes
 
 	msg, err := tss.ParseWireMsg(rMsgBytes)
 	if err != nil {
@@ -148,6 +141,7 @@ func KeygenRound3Accept(key string, from int, msgWireBytes string) (result u.Tss
 	}
 
 	result.Ok = true
+	party.temp.kgRound3Messages[from] = msg
 	return
 }
 
@@ -163,7 +157,7 @@ func KeygenRound3Finish(key string) (result u.TssResult) {
 		if j == party.PartyID().Index {
 			continue
 		}
-		if len(msg) == 0 {
+		if msg == nil {
 			result.Err = fmt.Sprintf("msg is null: %d", j)
 			return
 		}

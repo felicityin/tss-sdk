@@ -29,7 +29,7 @@ type (
 	localMessageStore struct {
 		kgRound1Messages,
 		kgRound2Messages,
-		kgRound3Messages [][]byte // msg.WireBytes()
+		kgRound3Messages []tss.ParsedMessage
 	}
 
 	// temp data (thrown away after keygen)
@@ -144,9 +144,9 @@ func NewLocalParty(
 	}
 
 	// msgs init
-	p.temp.kgRound1Messages = make([][]byte, partyCount)
-	p.temp.kgRound2Messages = make([][]byte, partyCount)
-	p.temp.kgRound3Messages = make([][]byte, partyCount)
+	p.temp.kgRound1Messages = make([]tss.ParsedMessage, partyCount)
+	p.temp.kgRound2Messages = make([]tss.ParsedMessage, partyCount)
+	p.temp.kgRound3Messages = make([]tss.ParsedMessage, partyCount)
 
 	// temp data init
 	p.temp.payload = make([]*CmpKeyGenerationPayload, partyCount)

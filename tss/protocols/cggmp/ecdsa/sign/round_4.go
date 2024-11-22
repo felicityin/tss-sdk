@@ -37,13 +37,7 @@ func OnsignRound4Exec(key string) (result utils.TssExecResult) {
 		}
 		contextJ := append(round.temp.ssid, big.NewInt(int64(j)).Bytes()...)
 
-		pMsg, err := tss.ParseWireMsg(round.temp.signRound3Messages[j])
-		if err != nil {
-			common.Logger.Errorf("msg error, parse wire r3msg fail, err:%s", err.Error())
-			result.Err = fmt.Sprintf("msg error, parse wire r3msg fail, err:%s", err.Error())
-			return
-		}
-		r3msg := pMsg.Content().(*SignRound3Message)
+		r3msg := round.temp.signRound3Messages[j].Content().(*SignRound3Message)
 
 		Delta, err := r3msg.UnmarshalBigDelta()
 		if err != nil {
@@ -96,7 +90,7 @@ func OnsignRound4Exec(key string) (result utils.TssExecResult) {
 		result.Err = fmt.Sprintf("get r4msg wire bytes error: %s", key)
 		return
 	}
-	round.temp.signRound4Messages[i] = msgWireBytes
+	round.temp.signRound4Messages[i] = r4msg
 
 	result.Ok = true
 	result.MsgWireBytes = msgWireBytes
@@ -117,7 +111,6 @@ func OnSignRound4MsgAccept(key string, from int, msgWireBytes string) (result ut
 		result.Err = fmt.Sprintf("msg error, r3msg base64 decode fail, err:%s", err.Error())
 		return
 	}
-	party.temp.signRound3Messages[from] = rMsgBytes
 
 	msg, err := tss.ParseWireMsg(rMsgBytes)
 	if err != nil {
@@ -131,6 +124,7 @@ func OnSignRound4MsgAccept(key string, from int, msgWireBytes string) (result ut
 	}
 
 	result.Ok = true
+	party.temp.signRound4Messages[from] = msg
 	return
 }
 
@@ -143,7 +137,10 @@ func OnSignRound4Finish(key string) (result utils.TssResult) {
 	}
 
 	for j, msg := range party.temp.signRound4Messages {
-		if len(msg) == 0 {
+		if j == party.PartyID().Index {
+			continue
+		}
+		if msg == nil {
 			result.Err = fmt.Sprintf("r4msg is null: %d", j)
 			return
 		}

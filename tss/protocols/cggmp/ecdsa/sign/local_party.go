@@ -41,7 +41,7 @@ type (
 		signRound1Message2s,
 		signRound2Messages,
 		signRound3Messages,
-		signRound4Messages [][]byte // msg.WireBytes()
+		signRound4Messages []tss.ParsedMessage
 	}
 
 	sendMessageStore struct {
@@ -186,11 +186,11 @@ func NewLocalParty(
 		ok:        make([]bool, partyCount),
 	}
 	// msgs init
-	p.temp.signRound1Message1s = make([][]byte, partyCount)
-	p.temp.signRound1Message2s = make([][]byte, partyCount)
-	p.temp.signRound2Messages = make([][]byte, partyCount)
-	p.temp.signRound3Messages = make([][]byte, partyCount)
-	p.temp.signRound4Messages = make([][]byte, partyCount)
+	p.temp.signRound1Message1s = make([]tss.ParsedMessage, partyCount)
+	p.temp.signRound1Message2s = make([]tss.ParsedMessage, partyCount)
+	p.temp.signRound2Messages = make([]tss.ParsedMessage, partyCount)
+	p.temp.signRound3Messages = make([]tss.ParsedMessage, partyCount)
+	p.temp.signRound4Messages = make([]tss.ParsedMessage, partyCount)
 	p.temp.send.signRound1Message2s = make([][]byte, partyCount)
 	p.temp.send.signRound2Messages = make([][]byte, partyCount)
 	p.temp.send.signRound3Messages = make([][]byte, partyCount)

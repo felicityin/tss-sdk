@@ -37,24 +37,12 @@ func OnsignRound2Exec(key string) (result utils.TssResult) {
 			continue
 		}
 
-		pMsg, err := tss.ParseWireMsg(round.temp.signRound1Message1s[j])
-		if err != nil {
-			common.Logger.Errorf("msg error, parse wire r1msg1 fail, err:%s", err.Error())
-			result.Err = fmt.Sprintf("msg error, parse wire r1msg1 fail, err:%s", err.Error())
-			return
-		}
-		r1msg1 := pMsg.Content().(*SignRound1Message1)
+		r1msg1 := round.temp.signRound1Message1s[j].Content().(*SignRound1Message1)
 		round.temp.kCiphertexts[j] = r1msg1.UnmarshalK()
 		round.temp.gammaCiphertexts[j] = r1msg1.UnmarshalGamma()
 		common.Logger.Debugf("P[%d]: receive P[%d]'s kCiphertext and gammaCiphertext", i, j)
 
-		pMsg, err = tss.ParseWireMsg(round.temp.signRound1Message2s[j])
-		if err != nil {
-			common.Logger.Errorf("msg error, parse wire r1msg2 fail, err:%s", err.Error())
-			result.Err = fmt.Sprintf("msg error, parse wire r1msg2 fail, err:%s", err.Error())
-			return
-		}
-		r1msg2 := pMsg.Content().(*SignRound1Message2)
+		r1msg2 := round.temp.signRound1Message2s[j].Content().(*SignRound1Message2)
 		encProof, err := r1msg2.UnmarshalEncProof()
 		if err != nil {
 			common.Logger.Errorf("unmarshal enc proof failed, party: %d", j)
@@ -171,7 +159,7 @@ func OnsignRound2Exec(key string) (result utils.TssResult) {
 		}
 		round.temp.send.signRound2Messages[j] = msgWireBytes
 		if j == i {
-			round.temp.signRound2Messages[i] = msgWireBytes
+			round.temp.signRound2Messages[i] = r2msg
 		}
 	}
 
@@ -205,7 +193,6 @@ func OnSignRound2MsgAccept(key string, from int, msgWireBytes string) (result ut
 		result.Err = fmt.Sprintf("msg error, r2msg base64 decode fail, err:%s", err.Error())
 		return
 	}
-	party.temp.signRound2Messages[from] = rMsgBytes
 
 	msg, err := tss.ParseWireMsg(rMsgBytes)
 	if err != nil {
@@ -219,6 +206,7 @@ func OnSignRound2MsgAccept(key string, from int, msgWireBytes string) (result ut
 	}
 
 	result.Ok = true
+	party.temp.signRound2Messages[from] = msg
 	return
 }
 
@@ -231,7 +219,10 @@ func OnSignRound2Finish(key string) (result utils.TssResult) {
 	}
 
 	for j, msg := range party.temp.signRound2Messages {
-		if len(msg) == 0 {
+		if j == party.PartyID().Index {
+			continue
+		}
+		if msg == nil {
 			result.Err = fmt.Sprintf("msg is null: %d", j)
 			return
 		}

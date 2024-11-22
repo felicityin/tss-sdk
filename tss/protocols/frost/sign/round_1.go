@@ -51,7 +51,7 @@ func OnSignRound1Exec(key string) (result utils.TssExecResult) {
 		result.Err = fmt.Sprintf("get msg wire bytes error: %s", key)
 		return
 	}
-	round.temp.signRound1Messages[i] = msgWireBytes
+	round.temp.signRound1Messages[i] = msg
 
 	result.Ok = true
 	result.MsgWireBytes = msgWireBytes
@@ -81,7 +81,7 @@ func OnSignRound1MsgAccept(key string, from int, msgWireBytes string) (result ut
 	}
 
 	if _, ok := msg.Content().(*SignRound1Message); ok {
-		party.temp.signRound1Messages[from] = rMsgBytes
+		party.temp.signRound1Messages[from] = msg
 	} else {
 		result.Err = "not SignRound1Message"
 		return
@@ -99,7 +99,7 @@ func OnSignRound1Finish(key string) (result utils.TssResult) {
 	}
 
 	for j, msg := range party.temp.signRound1Messages {
-		if len(msg) == 0 {
+		if msg == nil {
 			result.Err = fmt.Sprintf("msg is null: %d", j)
 			return
 		}

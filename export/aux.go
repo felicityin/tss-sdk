@@ -56,9 +56,9 @@ func AuxRound2Finish(key string) *MpcResult {
 	return toMpcRes(res)
 }
 
-func AuxRound3Exec(key string) *MpcExecResult {
+func AuxRound3Exec(key string) *MpcResult {
 	res := aux.AuxRound3Exec(key)
-	return toMpcExecRes(res)
+	return toMpcRes(res)
 }
 
 func GetAuxRound3Msg(key string, to int) *MpcExecResult {

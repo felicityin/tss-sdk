@@ -8,7 +8,6 @@ import (
 
 	"tss-sdk/tss/common"
 	"tss-sdk/tss/protocols/utils"
-	"tss-sdk/tss/tss"
 )
 
 func OnsignRound5Exec(key string) (result utils.TssExecResult) {
@@ -35,13 +34,7 @@ func OnsignRound5Exec(key string) (result utils.TssExecResult) {
 			continue
 		}
 
-		pMsg, err := tss.ParseWireMsg(round.temp.signRound4Messages[j])
-		if err != nil {
-			common.Logger.Errorf("msg error, parse wire r3msg fail, err:%s", err.Error())
-			result.Err = fmt.Sprintf("msg error, parse wire r3msg fail, err:%s", err.Error())
-			return
-		}
-		r4msg := pMsg.Content().(*SignRound4Message)
+		r4msg := round.temp.signRound4Messages[j].Content().(*SignRound4Message)
 
 		sumS.Add(sumS, r4msg.UnmarshalS())
 		sumS.Mod(sumS, round.params.EC().Params().N)

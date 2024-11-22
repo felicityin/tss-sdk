@@ -12,7 +12,6 @@ import (
 	"tss-sdk/tss/common"
 	"tss-sdk/tss/crypto"
 	"tss-sdk/tss/protocols/utils"
-	"tss-sdk/tss/tss"
 )
 
 func OnsignRound3Exec(key string) (result utils.TssExecResult) {
@@ -38,20 +37,14 @@ func OnsignRound3Exec(key string) (result utils.TssExecResult) {
 			continue
 		}
 
-		pMsg, err := tss.ParseWireMsg(round.temp.signRound2Messages[j])
-		if err != nil {
-			common.Logger.Errorf("msg error, parse wire msg fail, err:%s", err.Error())
-			result.Err = fmt.Sprintf("msg error, parse wire msg fail, err:%s", err.Error())
-			return
-		}
-		r2msg := pMsg.Content().(*SignRound2Message)
+		r2msg := round.temp.signRound2Messages[j].Content().(*SignRound2Message)
 		zi := r2msg.UnmarshalS()
 
 		ziGx, ziGy := round.params.EC().ScalarBaseMult(zi.Bytes())
 		ziG := crypto.NewECPointNoCurveCheck(round.params.EC(), ziGx, ziGy)
 
 		tmp := round.keys.PubXj[j].ScalarMult(round.temp.c)
-		tmp, err = tmp.Add(round.temp.Rj[j])
+		tmp, err := tmp.Add(round.temp.Rj[j])
 		if err != nil {
 			common.Logger.Errorf("[%d] err: Rj + c * Xj", Pj.Index)
 			result.Err = "err: err: Rj + c * Xj"

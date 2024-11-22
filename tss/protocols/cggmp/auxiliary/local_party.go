@@ -29,7 +29,7 @@ type (
 	localMessageStore struct {
 		auxRound1Messages,
 		auxRound2Messages,
-		auxRound3Messages [][]byte // msg.WireBytes()
+		auxRound3Messages []tss.ParsedMessage
 	}
 
 	sendMessageStore struct {
@@ -89,9 +89,9 @@ func NewLocalParty(
 	}
 
 	// msgs init
-	p.temp.auxRound1Messages = make([][]byte, partyCount)
-	p.temp.auxRound2Messages = make([][]byte, partyCount)
-	p.temp.auxRound3Messages = make([][]byte, partyCount)
+	p.temp.auxRound1Messages = make([]tss.ParsedMessage, partyCount)
+	p.temp.auxRound2Messages = make([]tss.ParsedMessage, partyCount)
+	p.temp.auxRound3Messages = make([]tss.ParsedMessage, partyCount)
 	p.temp.send.auxRound3Messages = make([][]byte, partyCount)
 
 	// temp data init

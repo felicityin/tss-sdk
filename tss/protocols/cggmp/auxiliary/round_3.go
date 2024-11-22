@@ -15,7 +15,7 @@ import (
 	u "tss-sdk/tss/protocols/utils"
 )
 
-func AuxRound3Exec(key string) (result u.TssExecResult) {
+func AuxRound3Exec(key string) (result u.TssResult) {
 	round, err := GetParty(key)
 	if err != nil {
 		result.Err = err.Error()
@@ -32,11 +32,6 @@ func AuxRound3Exec(key string) (result u.TssExecResult) {
 			continue
 		}
 
-		msg, err := u.ParseWireMsg(msg, "AuxRound2Message")
-		if err != nil {
-			result.Err = err.Error()
-			return
-		}
 		r2Msg := msg.Content().(*AuxRound2Message)
 
 		if !bytes.Equal(r2Msg.GetSsid(), round.temp.ssid) {
@@ -147,6 +142,9 @@ func AuxRound3Exec(key string) (result u.TssExecResult) {
 			return
 		}
 		round.temp.send.auxRound3Messages[j] = msgWireBytes
+		if j == i {
+			round.temp.auxRound3Messages[i] = r3msg
+		}
 	}
 	result.Ok = true
 	return result
@@ -192,12 +190,12 @@ func AuxRound3Accept(key string, from int, msgWireBytes string) (result u.TssRes
 		return
 	}
 
-	msgBytes, msg, err := u.ParseRecvMsg(msgWireBytes)
+	msg, err := u.ParseRecvMsg(msgWireBytes)
 	if err != nil {
 		result.Err = err.Error()
 		return
 	}
-	party.temp.auxRound3Messages[from] = msgBytes
+	party.temp.auxRound3Messages[from] = msg
 
 	if _, ok := msg.Content().(*AuxRound3Message); !ok {
 		err := fmt.Errorf("not AuxRound3Message")
@@ -220,7 +218,7 @@ func AuxRound3Finish(key string) (result u.TssResult) {
 		if j == party.PartyID().Index {
 			continue
 		}
-		if len(msg) == 0 {
+		if msg == nil {
 			result.Err = fmt.Sprintf("msg is null: %d", j)
 			return
 		}

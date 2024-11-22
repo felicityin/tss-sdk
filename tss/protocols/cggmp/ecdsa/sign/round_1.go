@@ -65,13 +65,7 @@ func OnSignRound1Exec(key string) (result utils.TssExecResult) {
 	// broadcast Ki, Gammai
 	common.Logger.Debugf("P[%d]: broadcast Ki", i)
 	r1msg1 := NewSignRound1Message1(round.PartyID(), round.temp.kCiphertexts[i], round.temp.gammaCiphertexts[i])
-	msgWireBytes, _, err := r1msg1.WireBytes()
-	if err != nil {
-		common.Logger.Errorf("get r1msg1 wire bytes error: %s", key)
-		result.Err = fmt.Sprintf("get r1msg1 wire bytes error: %s", key)
-		return
-	}
-	round.temp.signRound1Message1s[i] = msgWireBytes
+	round.temp.signRound1Message1s[i] = r1msg1
 
 	// p2p send enc proof to Pj
 	for j, Pj := range round.params.Parties().IDs() {
@@ -106,12 +100,19 @@ func OnSignRound1Exec(key string) (result utils.TssExecResult) {
 		}
 		round.temp.send.signRound1Message2s[j] = msgWireBytes
 		if j == i {
-			round.temp.signRound1Message2s[i] = msgWireBytes
+			round.temp.signRound1Message2s[i] = r1msg2
 		}
 	}
 
+	msgWireBytes, _, err := r1msg1.WireBytes()
+	if err != nil {
+		common.Logger.Errorf("get r1msg1 wire bytes error: %s", key)
+		result.Err = fmt.Sprintf("get r1msg1 wire bytes error: %s", key)
+		return
+	}
+
 	result.Ok = true
-	result.MsgWireBytes = round.temp.signRound1Message1s[i]
+	result.MsgWireBytes = msgWireBytes
 	return result
 }
 
@@ -150,9 +151,9 @@ func OnSignRound1MsgAccept(key string, from int, msgWireBytes string) (result ut
 	}
 
 	if _, ok := msg.Content().(*SignRound1Message1); ok {
-		party.temp.signRound1Message1s[from] = rMsgBytes
+		party.temp.signRound1Message1s[from] = msg
 	} else if _, ok := msg.Content().(*SignRound1Message2); ok {
-		party.temp.signRound1Message2s[from] = rMsgBytes
+		party.temp.signRound1Message2s[from] = msg
 	} else {
 		result.Err = "not SignRound1Message"
 		return
@@ -170,7 +171,10 @@ func OnSignRound1Finish(key string) (result utils.TssResult) {
 	}
 
 	for j, msg := range party.temp.signRound1Message2s {
-		if len(msg) == 0 {
+		if j == party.PartyID().Index {
+			continue
+		}
+		if msg == nil {
 			result.Err = fmt.Sprintf("msg is null: %d", j)
 			return
 		}
