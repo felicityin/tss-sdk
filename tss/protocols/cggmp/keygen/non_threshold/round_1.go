@@ -1,7 +1,6 @@
 package keygen
 
 import (
-	"encoding/base64"
 	"fmt"
 	"math/big"
 	"strconv"
@@ -9,14 +8,13 @@ import (
 	"tss-sdk/tss/common"
 	"tss-sdk/tss/crypto"
 	"tss-sdk/tss/protocols/utils"
-	"tss-sdk/tss/tss"
 )
 
-func KeygenRound1Exec(key string) (result utils.TssExecResult) {
-	round, ok := Parties[key]
+func KeygenRound1Exec(sessionId string) (result utils.TssExecResult) {
+	round, ok := Parties[sessionId]
 	if !ok {
-		common.Logger.Errorf("party not found: %s", key)
-		result.Err = fmt.Sprintf("party not found: %s", key)
+		common.Logger.Errorf("party not found: %s", sessionId)
+		result.Err = fmt.Sprintf("party not found: %s", sessionId)
 		return
 	}
 
@@ -71,40 +69,34 @@ func KeygenRound1Exec(key string) (result utils.TssExecResult) {
 	common.Logger.Infof("party: %d, round_1 broadcast", i)
 
 	msg := NewKGRound1Message(round.PartyID(), hash)
-	msgWireBytes, _, err := msg.WireBytes()
+	msgWireBytes, router, err := msg.WireBytes()
 	if err != nil {
-		common.Logger.Errorf("get msg wire bytes error: %s", key)
-		result.Err = fmt.Sprintf("get msg wire bytes error: %s", key)
+		common.Logger.Errorf("get msg wire bytes error: %s", err.Error())
+		result.Err = fmt.Sprintf("get msg wire bytes error: %s", err.Error())
 		return
 	}
 	round.temp.kgRound1Messages[i] = msg
 
 	result.Ok = true
-	result.MsgWireBytes = msgWireBytes
+	result.Msg = utils.MpcBroadcastMsg(round.sessionId, round.sessionKind, router, msgWireBytes)
 	return result
 }
 
-func KeygenRound1Accept(key string, from int, msgWireBytes string) (result utils.TssResult) {
-	party, ok := Parties[key]
+func KeygenRound1Accept(sessionId string, recv []byte) (result utils.TssResult) {
+	party, ok := Parties[sessionId]
 	if !ok {
-		common.Logger.Errorf("party not found: %s", key)
-		result.Err = fmt.Sprintf("party not found: %s", key)
+		common.Logger.Errorf("party not found: %s", sessionId)
+		result.Err = fmt.Sprintf("party not found: %s", sessionId)
 		return
 	}
 
-	rMsgBytes, err := base64.StdEncoding.DecodeString(msgWireBytes)
+	msg, from, err := utils.ParseMpcMsg(recv, sessionId)
 	if err != nil {
-		common.Logger.Errorf("msg error, msg base64 decode fail, err: %s", err.Error())
-		result.Err = fmt.Sprintf("msg error, msg base64 decode fail, err:%s", err.Error())
+		common.Logger.Errorf("parse recv msg err: %s", err.Error())
+		result.Err = err.Error()
 		return
 	}
 
-	msg, err := tss.ParseWireMsg(rMsgBytes)
-	if err != nil {
-		common.Logger.Errorf("msg error, parse wire msg fail, err: %s", err.Error())
-		result.Err = fmt.Sprintf("msg error, parse wire msg fail, err:%s", err.Error())
-		return
-	}
 	if _, ok := msg.Content().(*KGRound1Message); !ok {
 		result.Err = fmt.Sprintf("not KGRound1Message, err: %s", err.Error())
 		return
@@ -115,11 +107,11 @@ func KeygenRound1Accept(key string, from int, msgWireBytes string) (result utils
 	return
 }
 
-func KeygenRound1Finish(key string) (result utils.TssResult) {
-	party, ok := Parties[key]
+func KeygenRound1Finish(sessionId string) (result utils.TssResult) {
+	party, ok := Parties[sessionId]
 	if !ok {
-		common.Logger.Errorf("party not found: %s", key)
-		result.Err = fmt.Sprintf("party not found: %s", key)
+		common.Logger.Errorf("party not found: %s", sessionId)
+		result.Err = fmt.Sprintf("party not found: %s", sessionId)
 		return
 	}
 

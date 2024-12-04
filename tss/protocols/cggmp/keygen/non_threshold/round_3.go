@@ -2,7 +2,6 @@ package keygen
 
 import (
 	"bytes"
-	"encoding/base64"
 	"fmt"
 	"math/big"
 	"strconv"
@@ -11,7 +10,6 @@ import (
 	"tss-sdk/tss/crypto/alice/utils"
 	"tss-sdk/tss/crypto/schnorr"
 	u "tss-sdk/tss/protocols/utils"
-	"tss-sdk/tss/tss"
 )
 
 func KeygenRound3Exec(key string) (result u.TssExecResult) {
@@ -101,7 +99,7 @@ func KeygenRound3Exec(key string) (result u.TssExecResult) {
 	// BROADCAST proofs
 	common.Logger.Infof("party: %d, round_3 broadcast", i)
 	msg := NewKGRound3Message(round.PartyID(), schProof.Proof.Bytes())
-	msgWireBytes, _, err := msg.WireBytes()
+	msgWireBytes, router, err := msg.WireBytes()
 	if err != nil {
 		common.Logger.Errorf("get msg wire bytes error: %s", key)
 		result.Err = fmt.Sprintf("get msg wire bytes error: %s", key)
@@ -110,31 +108,25 @@ func KeygenRound3Exec(key string) (result u.TssExecResult) {
 	round.temp.kgRound3Messages[i] = msg
 
 	result.Ok = true
-	result.MsgWireBytes = msgWireBytes
+	result.Msg = u.MpcBroadcastMsg(round.sessionId, round.sessionKind, router, msgWireBytes)
 	return result
 }
 
-func KeygenRound3Accept(key string, from int, msgWireBytes string) (result u.TssResult) {
-	party, ok := Parties[key]
+func KeygenRound3Accept(sessionId string, recv []byte) (result u.TssResult) {
+	party, ok := Parties[sessionId]
 	if !ok {
-		common.Logger.Errorf("party not found: %s", key)
-		result.Err = fmt.Sprintf("party not found: %s", key)
+		common.Logger.Errorf("party not found: %s", sessionId)
+		result.Err = fmt.Sprintf("party not found: %s", sessionId)
 		return
 	}
 
-	rMsgBytes, err := base64.StdEncoding.DecodeString(msgWireBytes)
+	msg, from, err := u.ParseMpcMsg(recv, sessionId)
 	if err != nil {
-		common.Logger.Errorf("msg error, msg base64 decode fail, err:%s", err.Error())
-		result.Err = fmt.Sprintf("msg error, msg base64 decode fail, err:%s", err.Error())
+		common.Logger.Errorf("parse recv msg err: %s", err.Error())
+		result.Err = err.Error()
 		return
 	}
 
-	msg, err := tss.ParseWireMsg(rMsgBytes)
-	if err != nil {
-		common.Logger.Errorf("msg error, parse wire msg fail, err:%s", err.Error())
-		result.Err = fmt.Sprintf("msg error, parse wire msg fail, err:%s", err.Error())
-		return
-	}
 	if _, ok := msg.Content().(*KGRound3Message); !ok {
 		result.Err = fmt.Sprintf("not KGRound3Message, err:%s", err.Error())
 		return

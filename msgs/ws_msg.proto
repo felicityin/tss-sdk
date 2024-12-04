@@ -1,0 +1,112 @@
+
+syntax = "proto3";
+package ws.message;
+option go_package = "./msgs";
+
+message WsMsg {
+    string name = 1;
+    bytes params = 2;
+    string err = 3;
+}
+
+message SessionCreatedParams {
+    string session_id = 1;
+    string session_kind = 2;
+    string device_id = 3;
+    uint32 party_n = 4;
+    uint32 party_m = 5;
+}
+
+message SessionJoinParams {
+    string session_id = 1;
+    string session_kind = 2;
+    string device_id = 3;
+}
+
+message SessionJoinedParams {
+    string session_id = 1;
+    string session_kind = 2;
+    uint64 conn_id = 3;
+}
+
+message SessionStartParams {
+    string session_id = 1;
+    string session_kind = 2;
+    repeated string device_ids = 3;
+    repeated uint64 conn_ids = 4;
+    bytes data = 5;
+}
+
+message SessionStartKeygenData {
+    int64 team_id = 1;
+    int64 user_id = 2;
+    string device_id = 3;
+    int64 wallet_id = 4;
+}
+
+message SessionStartAuxData {
+    int64 team_id = 1;
+    int64 user_id = 2;
+    string device_id = 3;
+}
+
+message SessionStartSignData {
+    int64 team_id = 1;
+    int64 user_id = 2;
+    string device_id = 3;
+    string order_id = 4;
+    string keygen_session_id = 5;
+    string aux_session_id = 6;
+    string msg = 7;
+    int32 msg_total = 8;
+    int32 msg_index = 9;
+    string wallet_path = 10;
+}
+
+message SessionMessageParams {
+    string session_id = 1;
+    string session_kind = 2;
+    bool is_broadcast = 3;
+    uint64 to = 4;
+    bytes router = 5;
+    bytes msg = 6;
+}
+
+message SessionFinishParams {
+    string session_id = 1;
+    string session_kind = 2;
+    string device_id = 3;
+    uint64 conn_id = 4;
+    string pubkey = 5;
+    string chain_code = 6;
+    string order_id = 7;
+    string sig = 8;
+    int32 sig_index = 9;
+}
+
+message SessionFinishedParams {
+    string session_id = 1;
+    string session_kind = 2;
+    string device_id = 3;
+    uint64 conn_id = 4;
+}
+
+message SessionErrParams {
+    string session_id = 1;
+    string session_kind = 2;
+    string device_id = 3;
+    uint64 conn_id = 4;
+    string err = 5;
+}
+
+message SignStartedParams {
+    string order_id = 1;
+    string session_kind = 2;
+    int32 parties = 3;
+    repeated SignSession sessions = 4;
+}
+
+message SignSession {
+    int32 msg_index = 1;
+    string session_id = 2;
+}

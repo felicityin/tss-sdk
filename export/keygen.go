@@ -7,6 +7,8 @@ import "C"
 
 import (
 	"encoding/json"
+	"fmt"
+	"strconv"
 	"strings"
 
 	keygen "tss-sdk/tss/protocols/cggmp/keygen/non_threshold"
@@ -14,9 +16,11 @@ import (
 )
 
 type MpcExecResult struct {
-	Ok           bool   `json:"ok"`
-	Err          string `json:"error"`
-	MsgWireBytes []byte `json:"data"`
+	Ok        bool   `json:"ok"`
+	Err       string `json:"error"`
+	Msg       []byte `json:"data"`
+	Pubkey    string `json:"pubkey"`    // hex string. only keygen return
+	ChainCode string `json:"chainCode"` // hex string. only keygen return
 }
 
 type MpcResult struct {
@@ -36,78 +40,81 @@ func (result MpcResult) ToJson() string {
 
 func NewKeygenLocalParty(
 	algo string, // ecdsa or eddsa
-	key string,
-	partyIndex int,
-	partyCount int,
-	pIDs string,
+	sessionId string,
+	sessionKind string,
+	deviceId string,
+	partyDevices string, // comma separated
+	connIds string, // comma separated
 	rootPrivKey string, // hex string
 	chainCode string, // hex string
 ) *MpcResult {
-	ids := strings.Split(pIDs, ",")
-	res := keygen.NewLocalParty(algo, key, partyIndex, partyCount, ids, rootPrivKey, chainCode)
+	parties, connectIds, err := parseParties(partyDevices, connIds)
+	if err != nil {
+		return &MpcResult{Ok: false, Err: err.Error()}
+	}
+	res := keygen.NewLocalParty(algo, sessionId, sessionKind, deviceId, parties, connectIds, rootPrivKey, chainCode)
 	return toMpcRes(res)
 }
 
-func RemoveKeygenParty(key string) bool {
-	return keygen.RemoveParty(key)
+func RemoveKeygenParty(sessionId string) bool {
+	return keygen.RemoveParty(sessionId)
 }
 
-func KeygenRound1Exec(key string) *MpcExecResult {
-	res := keygen.KeygenRound1Exec(key)
+func KeygenRound1Exec(sessionId string) *MpcExecResult {
+	res := keygen.KeygenRound1Exec(sessionId)
 	return toMpcExecRes(res)
 }
 
-func KeygenRound1Accept(key string, from int, msgWireBytes string) *MpcResult {
-	res := keygen.KeygenRound1Accept(key, from, msgWireBytes)
+func KeygenRound1Accept(sessionId string, recv []byte) *MpcResult {
+	res := keygen.KeygenRound1Accept(sessionId, recv)
 	return toMpcRes(res)
 }
 
-func KeygenRound1Finish(key string) *MpcResult {
-	res := keygen.KeygenRound1Finish(key)
+func KeygenRound1Finish(sessionId string) *MpcResult {
+	res := keygen.KeygenRound1Finish(sessionId)
 	return toMpcRes(res)
 }
 
-func KeygenRound2Exec(key string) *MpcExecResult {
-	res := keygen.KeygenRound2Exec(key)
+func KeygenRound2Exec(sessionId string) *MpcExecResult {
+	res := keygen.KeygenRound2Exec(sessionId)
 	return toMpcExecRes(res)
 }
 
-func KeygenRound2Accept(key string, from int, msgWireBytes string) *MpcResult {
-	res := keygen.KeygenRound2Accept(key, from, msgWireBytes)
+func KeygenRound2Accept(sessionId string, recv []byte) *MpcResult {
+	res := keygen.KeygenRound2Accept(sessionId, recv)
 	return toMpcRes(res)
 }
 
-func KeygenRound2Finish(key string) *MpcResult {
-	res := keygen.KeygenRound2Finish(key)
+func KeygenRound2Finish(sessionId string) *MpcResult {
+	res := keygen.KeygenRound2Finish(sessionId)
 	return toMpcRes(res)
 }
 
-func KeygenRound3Exec(key string) *MpcExecResult {
-	res := keygen.KeygenRound3Exec(key)
+func KeygenRound3Exec(sessionId string) *MpcExecResult {
+	res := keygen.KeygenRound3Exec(sessionId)
 	return toMpcExecRes(res)
 }
 
-func KeygenRound3Accept(key string, from int, msgWireBytes string) *MpcResult {
-	res := keygen.KeygenRound3Accept(key, from, msgWireBytes)
+func KeygenRound3Accept(sessionId string, recv []byte) *MpcResult {
+	res := keygen.KeygenRound3Accept(sessionId, recv)
 	return toMpcRes(res)
 }
 
-func KeygenRound3Finish(key string) *MpcResult {
-	res := keygen.KeygenRound3Finish(key)
+func KeygenRound3Finish(sessionId string) *MpcResult {
+	res := keygen.KeygenRound3Finish(sessionId)
 	return toMpcRes(res)
 }
 
-// chainCodes: hex string array
-func KeygenRound4Exec(key string) *MpcExecResult {
-	res := keygen.KeygenRound4Exec(key)
+func KeygenRound4Exec(sessionId string) *MpcExecResult {
+	res := keygen.KeygenRound4Exec(sessionId)
 	return toMpcExecRes(res)
 }
 
 func toMpcExecRes(res utils.TssExecResult) *MpcExecResult {
 	return &MpcExecResult{
-		Ok:           res.Ok,
-		Err:          res.Err,
-		MsgWireBytes: res.MsgWireBytes,
+		Ok:  res.Ok,
+		Err: res.Err,
+		Msg: res.MsgWireBytes,
 	}
 }
 
@@ -116,4 +123,24 @@ func toMpcRes(res utils.TssResult) *MpcResult {
 		Ok:  res.Ok,
 		Err: res.Err,
 	}
+}
+
+func parseParties(partyDevices string, connIds string) ([]string, []uint64, error) {
+	parties := strings.Split(partyDevices, ",")
+	connectIds := strings.Split(connIds, ",")
+
+	if len(parties) != len(connectIds) {
+		return nil, nil, fmt.Errorf("party devices: %d, connIds: %d, not equal", len(parties), len(connectIds))
+	}
+
+	conns := make([]uint64, 0)
+	for _, connId := range connectIds {
+		conn, err := strconv.ParseUint(connId, 10, 64)
+		if err != nil {
+			return nil, nil, fmt.Errorf("connId %s is not uint64: %s", connId, err.Error())
+		}
+		conns = append(conns, conn)
+	}
+
+	return parties, conns, nil
 }

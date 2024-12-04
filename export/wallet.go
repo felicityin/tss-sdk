@@ -35,20 +35,37 @@ func GenerateMnemonic(length int) string {
 	return mn
 }
 
-// pinCode: eg. 124561
+// pinCode: is a 6-digit number. eg. 124561
 func GenHardWalletPriv(mnemonic string, pinCode string) *WalletResult {
-	seed, err := hdwallet.NewSeed(mnemonic, "", hdwallet.English)
+	seed, err := hdwallet.NewSeed(mnemonic, pinCode, hdwallet.English)
 	if err != nil {
 		return &WalletResult{Success: false, ErrMsg: err.Error()}
 	}
 
-	masterPriv, chainCode := hdwallet.ComputeMasterFromSeed(seed, pinCode)
+	masterPriv, chainCode := hdwallet.ComputeMastersFromSeed(seed)
 
 	return &WalletResult{
 		Success:   true,
 		ChainCode: hex.EncodeToString(chainCode[:]),
 		Result:    hex.EncodeToString(masterPriv[:]),
 	}
+}
+
+func GenHardWalletFingerPrint(mnemonic, pinCode string) *WalletResult {
+	status := bip39.IsMnemonicValid(mnemonic)
+	result := &WalletResult{Success: status}
+	if status {
+		seed, err := hdwallet.NewSeed(mnemonic, pinCode, hdwallet.English)
+		if err != nil {
+			return &WalletResult{Success: false, ErrMsg: err.Error()}
+		}
+		masterPriv, _ := hdwallet.ComputeMastersFromSeed(seed)
+		finger := owkeychain.GetFingerPrint(masterPriv[:], true, owcrypt.ECC_CURVE_SECP256K1)
+		result.Result = hex.EncodeToString(finger)
+	} else {
+		result.ErrMsg = "Vaild mnemonic not passed!"
+	}
+	return result
 }
 
 func GetFingerPrint(mnemonic string) *WalletResult {
@@ -91,6 +108,26 @@ func GeneratePathWallet(mn, path string) *WalletResult {
 	if err != nil {
 		return &WalletResult{Success: false, ErrMsg: err.Error()}
 	}
+	masterPriv, ch := hdwallet.ComputeMastersFromSeed(seed)
+
+	derivedPriv, ch, err := hdwallet.DerivePrivateKeyForPath(masterPriv, ch, path)
+	if err != nil {
+		return &WalletResult{Success: false, ErrMsg: err.Error()}
+	}
+
+	return &WalletResult{
+		Success:   true,
+		ChainCode: hex.EncodeToString(ch[:]),
+		Result:    hex.EncodeToString(derivedPriv[:]),
+	}
+}
+
+func GenerateHardWallet(mnemonic, pinCode, path string) *WalletResult {
+	seed, err := hdwallet.NewSeed(mnemonic, pinCode, hdwallet.English)
+	if err != nil {
+		return &WalletResult{Success: false, ErrMsg: err.Error()}
+	}
+
 	masterPriv, ch := hdwallet.ComputeMastersFromSeed(seed)
 
 	derivedPriv, ch, err := hdwallet.DerivePrivateKeyForPath(masterPriv, ch, path)

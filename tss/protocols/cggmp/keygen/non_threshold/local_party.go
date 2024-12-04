@@ -24,6 +24,10 @@ type (
 
 		number int
 		ok     []bool
+
+		sessionId   string
+		sessionKind string
+		partyIndex  int
 	}
 
 	localMessageStore struct {
@@ -76,10 +80,11 @@ var Parties = map[string]*LocalParty{}
 // Exported, used in `tss` client
 func NewLocalParty(
 	algo string, // ecdsa or eddsa
-	key string,
-	partyIndex int,
-	partyCount int,
-	pIDs []string,
+	sessionId string,
+	sessionKind string,
+	deviceId string,
+	partyDevices []string,
+	connIds []uint64,
 	rootPrivKey string, // hex string
 	chainCode string, // hex string
 ) (result utils.TssResult) {
@@ -99,23 +104,19 @@ func NewLocalParty(
 		return
 	}
 
-	uIds := make(tss.UnSortedPartyIDs, 0, partyCount)
-	for i := 0; i < partyCount; i++ {
-		pId, _ := new(big.Int).SetString(pIDs[i], 10)
-		common.Logger.Infof("id: %d", pId)
-		uIds = append(uIds, tss.NewPartyID(fmt.Sprintf("%d", i), fmt.Sprintf("m_%d", i), pId))
-	}
-	ids := tss.SortPartyIDs(uIds)
+	partyCount := len(partyDevices)
+	partyIndex, pIds := utils.SortPartys(deviceId, partyDevices, connIds)
+	p2pCtx := tss.NewPeerContext(pIds)
+	common.Logger.Infof("party index: %d", partyIndex)
 
-	p2pCtx := tss.NewPeerContext(ids)
 	var params *tss.Parameters
 	if algo == "ecdsa" {
-		params = tss.NewParameters(tss.S256(), p2pCtx, ids[partyIndex], partyCount, partyCount)
+		params = tss.NewParameters(tss.S256(), p2pCtx, pIds[partyIndex], partyCount, partyCount)
 	} else if algo == "eddsa" {
-		params = tss.NewParameters(tss.Edwards(), p2pCtx, ids[partyIndex], partyCount, partyCount)
+		params = tss.NewParameters(tss.Edwards(), p2pCtx, pIds[partyIndex], partyCount, partyCount)
 	} else {
-		common.Logger.Errorf("unknown alog: %s", algo)
-		result.Err = fmt.Sprintf("unknown alog: %s", algo)
+		common.Logger.Errorf("unknown algo: %s", algo)
+		result.Err = fmt.Sprintf("unknown algo: %s", algo)
 		return
 	}
 
@@ -136,11 +137,14 @@ func NewLocalParty(
 	data.ChainCode = new(big.Int).SetBytes(chaincode)
 
 	p := &LocalParty{
-		BaseParty: new(tss.BaseParty),
-		params:    params,
-		temp:      localTempData{},
-		data:      data,
-		ok:        make([]bool, partyCount),
+		BaseParty:   new(tss.BaseParty),
+		params:      params,
+		temp:        localTempData{},
+		data:        data,
+		ok:          make([]bool, partyCount),
+		sessionId:   sessionId,
+		sessionKind: sessionKind,
+		partyIndex:  partyIndex,
 	}
 
 	// msgs init
@@ -152,16 +156,16 @@ func NewLocalParty(
 	p.temp.payload = make([]*CmpKeyGenerationPayload, partyCount)
 	p.temp.V = make([][]byte, partyCount)
 
-	Parties[key] = p
+	Parties[sessionId] = p
 	result.Ok = true
 	return
 }
 
-func RemoveParty(key string) bool {
-	if _, ok := Parties[key]; !ok {
+func RemoveParty(sessionId string) bool {
+	if _, ok := Parties[sessionId]; !ok {
 		return false
 	}
-	delete(Parties, key)
+	delete(Parties, sessionId)
 	return true
 }
 

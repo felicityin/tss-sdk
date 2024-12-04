@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/big"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -11,6 +12,14 @@ import (
 	"tss-sdk/tss/crypto"
 	"tss-sdk/tss/tss"
 )
+
+func TestGenerateMnemonic(t *testing.T) {
+	m := GenerateMnemonic(24)
+	fmt.Printf("%s\n", m)
+
+	words := strings.Split(m, " ")
+	assert.Equal(t, len(words), 24)
+}
 
 func TestGetSignatureWithV(t *testing.T) {
 	s := GetSignatureWithV(

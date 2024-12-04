@@ -1,11 +1,13 @@
 package keygen
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math/big"
 
 	"tss-sdk/tss/common"
+	"tss-sdk/tss/crypto/pubkey"
 	"tss-sdk/tss/crypto/schnorr"
 	"tss-sdk/tss/protocols/utils"
 )
@@ -80,8 +82,16 @@ func KeygenRound4Exec(key string) (result utils.TssExecResult) {
 		return
 	}
 
+	pk, err := pubkey.EncodeEcdsaPk(round.data.Pubkey.X(), round.data.Pubkey.Y())
+	if err != nil {
+		result.Err = fmt.Sprintf("encode ecdsa pk err: %s", err.Error())
+		return
+	}
+
 	common.Logger.Infof("party: %d, round_4 save", i)
 	result.Ok = true
-	result.MsgWireBytes = saveBytes
+	result.Msg = saveBytes
+	result.ChainCode = hex.EncodeToString(round.data.ChainCode.Bytes())
+	result.Pubkey = pk
 	return result
 }
