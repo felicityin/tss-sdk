@@ -9,8 +9,8 @@ import (
 	"tss-sdk/tss/protocols/utils"
 )
 
-func AuxRound2Exec(key string) (result utils.TssExecResult) {
-	round, err := GetParty(key)
+func AuxRound2Exec(sessionId string) (result utils.TssExecResult) {
+	round, err := GetParty(sessionId)
 	if err != nil {
 		result.Err = err.Error()
 		return
@@ -47,7 +47,7 @@ func AuxRound2Exec(key string) (result utils.TssExecResult) {
 		round.temp.rho,
 		round.temp.u,
 	)
-	msgWireBytes, _, err := msg.WireBytes()
+	msgWireBytes, router, err := msg.WireBytes()
 	if err != nil {
 		err = fmt.Errorf("get msg wire bytes error: %s", err.Error())
 		common.Logger.Errorf("%s", err.Error())
@@ -57,19 +57,20 @@ func AuxRound2Exec(key string) (result utils.TssExecResult) {
 	round.temp.auxRound2Messages[i] = msg
 
 	result.Ok = true
-	result.MsgWireBytes = msgWireBytes
+	result.Msg = utils.MpcBroadcastMsg(round.sessionId, round.sessionKind, router, msgWireBytes)
 	return result
 }
 
-func AuxRound2Accept(key string, from int, msgWireBytes string) (result utils.TssResult) {
-	party, err := GetParty(key)
+func AuxRound2Accept(sessionId string, recv []byte) (result utils.TssResult) {
+	party, err := GetParty(sessionId)
 	if err != nil {
 		result.Err = err.Error()
 		return
 	}
 
-	msg, err := utils.ParseRecvMsg(msgWireBytes)
+	msg, from, err := utils.ParseMpcMsg(recv, sessionId)
 	if err != nil {
+		common.Logger.Errorf("parse recv msg err: %s", err.Error())
 		result.Err = err.Error()
 		return
 	}
@@ -85,8 +86,8 @@ func AuxRound2Accept(key string, from int, msgWireBytes string) (result utils.Ts
 	return
 }
 
-func AuxRound2Finish(key string) (result utils.TssResult) {
-	party, err := GetParty(key)
+func AuxRound2Finish(sessionId string) (result utils.TssResult) {
+	party, err := GetParty(sessionId)
 	if err != nil {
 		result.Err = err.Error()
 		return

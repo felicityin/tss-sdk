@@ -105,8 +105,10 @@ func NewLocalParty(
 	}
 
 	partyCount := len(partyDevices)
-	partyIndex, pIds := utils.SortPartys(deviceId, partyDevices, connIds)
+	partyIndexs, pIds := utils.SortPartys(deviceId, partyDevices, connIds)
 	p2pCtx := tss.NewPeerContext(pIds)
+
+	partyIndex := partyIndexs[deviceId]
 	common.Logger.Infof("party index: %d", partyIndex)
 
 	var params *tss.Parameters

@@ -8,8 +8,8 @@ import (
 	"tss-sdk/tss/protocols/utils"
 )
 
-func AuxRound4Exec(key string) (result utils.TssExecResult) {
-	round, err := GetParty(key)
+func AuxRound4Exec(sessionId string) (result utils.TssExecResult) {
+	round, err := GetParty(sessionId)
 	if err != nil {
 		result.Err = err.Error()
 		return

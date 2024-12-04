@@ -42,7 +42,7 @@ func partyId(peer string) *big.Int {
 	return new(big.Int).SetBytes(h.Sum(nil))
 }
 
-func SortPartys(deviceId string, partyDevices []string, connIds []uint64) (partyIndex int, pids tss.SortedPartyIDs) {
+func SortPartys(deviceId string, partyDevices []string, connIds []uint64) (deviceToPartyIndex map[string]int, pids tss.SortedPartyIDs) {
 	peers := make([]*PeerId, 0, len(partyDevices))
 	for i, peer := range partyDevices {
 		peers = append(peers, &PeerId{
@@ -56,6 +56,7 @@ func SortPartys(deviceId string, partyDevices []string, connIds []uint64) (party
 		return peers[i].id.Cmp(peers[j].id) < 0
 	})
 
+	deviceToPartyIndex = make(map[string]int)
 	ids := make(tss.SortedPartyIDs, 0, len(partyDevices))
 	for i, peer := range peers {
 		id := tss.NewPartyID(
@@ -67,11 +68,9 @@ func SortPartys(deviceId string, partyDevices []string, connIds []uint64) (party
 		ids = append(ids, id)
 		common.Logger.Infof("sorted peer, index: %d, device id: %s, conn id: %d, id: %d", i, peer.deviceId, peer.connId, peer.id)
 
-		if deviceId == peer.deviceId {
-			partyIndex = i
-		}
+		deviceToPartyIndex[peer.deviceId] = i
 	}
-	return partyIndex, ids
+	return deviceToPartyIndex, ids
 }
 
 func MpcBroadcastMsg(sessionId, sessionKind string, router *tss.MessageRouting, data []byte) []byte {

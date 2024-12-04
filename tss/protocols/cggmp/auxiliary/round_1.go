@@ -14,8 +14,8 @@ import (
 
 var ProofParameter = crypto.NewProofConfig(tss.S256().Params().N)
 
-func AuxRound1Exec(key string) (result utils.TssExecResult) {
-	round, err := GetParty(key)
+func AuxRound1Exec(sessionId string) (result utils.TssExecResult) {
+	round, err := GetParty(sessionId)
 	if err != nil {
 		result.Err = err.Error()
 		return
@@ -54,7 +54,7 @@ func AuxRound1Exec(key string) (result utils.TssExecResult) {
 	// Set pedersen parameter from paillierKey: Sample r in Z_N^ast, lambda = Z_phi(N), t = r^2 and s = t^lambda mod N
 	pedersen, err := round.save.PaillierSK.NewPedersenParameterByPaillier()
 	if err != nil {
-		err = fmt.Errorf("generate ring-pedersen keys failed: %s", err.Error())
+		err = fmt.Errorf("generate ring-pedersen sessionIds failed: %s", err.Error())
 		common.Logger.Errorf("%s", err.Error())
 		result.Err = err.Error()
 		return
@@ -100,7 +100,7 @@ func AuxRound1Exec(key string) (result utils.TssExecResult) {
 	common.Logger.Infof("party: %d, round_1 broadcast", i)
 
 	msg := NewAuxRound1Message(round.PartyID(), hash)
-	msgWireBytes, _, err := msg.WireBytes()
+	msgWireBytes, router, err := msg.WireBytes()
 	if err != nil {
 		err = fmt.Errorf("get msg wire bytes error: %s", err.Error())
 		common.Logger.Errorf("%s", err.Error())
@@ -110,19 +110,20 @@ func AuxRound1Exec(key string) (result utils.TssExecResult) {
 	round.temp.auxRound1Messages[i] = msg
 
 	result.Ok = true
-	result.MsgWireBytes = msgWireBytes
+	result.Msg = utils.MpcBroadcastMsg(round.sessionId, round.sessionKind, router, msgWireBytes)
 	return result
 }
 
-func AuxRound1Accept(key string, from int, msgWireBytes string) (result utils.TssResult) {
-	party, err := GetParty(key)
+func AuxRound1Accept(sessionId string, recv []byte) (result utils.TssResult) {
+	party, err := GetParty(sessionId)
 	if err != nil {
 		result.Err = err.Error()
 		return
 	}
 
-	msg, err := utils.ParseRecvMsg(msgWireBytes)
+	msg, from, err := utils.ParseMpcMsg(recv, sessionId)
 	if err != nil {
+		common.Logger.Errorf("parse recv msg err: %s", err.Error())
 		result.Err = err.Error()
 		return
 	}
@@ -138,8 +139,8 @@ func AuxRound1Accept(key string, from int, msgWireBytes string) (result utils.Ts
 	return
 }
 
-func AuxRound1Finish(key string) (result utils.TssResult) {
-	party, err := GetParty(key)
+func AuxRound1Finish(sessionId string) (result utils.TssResult) {
+	party, err := GetParty(sessionId)
 	if err != nil {
 		result.Err = err.Error()
 		return

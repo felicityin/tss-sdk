@@ -6,78 +6,79 @@ package tssdk
 import "C"
 
 import (
-	"strings"
-
 	aux "tss-sdk/tss/protocols/cggmp/auxiliary"
 )
 
 func NewAuxLocalParty(
-	key string,
-	partyIndex int,
-	partyCount int,
-	pIDs string,
+	sessionId string,
+	sessionKind string,
+	deviceId string,
+	partyDevices string, // comma separated
+	connIds string, // comma separated
 ) *MpcResult {
-	ids := strings.Split(pIDs, ",")
-	res := aux.NewLocalParty(key, partyIndex, partyCount, ids)
+	parties, connectIds, err := parseParties(partyDevices, connIds)
+	if err != nil {
+		return &MpcResult{Ok: false, Err: err.Error()}
+	}
+	res := aux.NewLocalParty(sessionId, sessionKind, deviceId, parties, connectIds)
 	return toMpcRes(res)
 }
 
-func RemoveAuxParty(key string) bool {
-	return aux.RemoveAuxParty(key)
+func RemoveAuxParty(sessionId string) bool {
+	return aux.RemoveAuxParty(sessionId)
 }
 
-func AuxRound1Exec(key string) *MpcExecResult {
-	res := aux.AuxRound1Exec(key)
+func AuxRound1Exec(sessionId string) *MpcExecResult {
+	res := aux.AuxRound1Exec(sessionId)
 	return toMpcExecRes(res)
 }
 
-func AuxRound1Accept(key string, from int, msgWireBytes string) *MpcResult {
-	res := aux.AuxRound1Accept(key, from, msgWireBytes)
+func AuxRound1Accept(sessionId string, recv []byte) *MpcResult {
+	res := aux.AuxRound1Accept(sessionId, recv)
 	return toMpcRes(res)
 }
 
-func AuxRound1Finish(key string) *MpcResult {
-	res := aux.AuxRound1Finish(key)
+func AuxRound1Finish(sessionId string) *MpcResult {
+	res := aux.AuxRound1Finish(sessionId)
 	return toMpcRes(res)
 }
 
-func AuxRound2Exec(key string) *MpcExecResult {
-	res := aux.AuxRound2Exec(key)
+func AuxRound2Exec(sessionId string) *MpcExecResult {
+	res := aux.AuxRound2Exec(sessionId)
 	return toMpcExecRes(res)
 }
 
-func AuxRound2Accept(key string, from int, msgWireBytes string) *MpcResult {
-	res := aux.AuxRound2Accept(key, from, msgWireBytes)
+func AuxRound2Accept(sessionId string, recv []byte) *MpcResult {
+	res := aux.AuxRound2Accept(sessionId, recv)
 	return toMpcRes(res)
 }
 
-func AuxRound2Finish(key string) *MpcResult {
-	res := aux.AuxRound2Finish(key)
+func AuxRound2Finish(sessionId string) *MpcResult {
+	res := aux.AuxRound2Finish(sessionId)
 	return toMpcRes(res)
 }
 
-func AuxRound3Exec(key string) *MpcResult {
-	res := aux.AuxRound3Exec(key)
+func AuxRound3Exec(sessionId string) *MpcResult {
+	res := aux.AuxRound3Exec(sessionId)
 	return toMpcRes(res)
 }
 
-func GetAuxRound3Msg(key string, to int) *MpcExecResult {
-	res := aux.GetRound3Msg(key, to)
+func GetAuxRound3Msg(sessionId string, toDeviceId string) *MpcExecResult {
+	res := aux.GetRound3Msg(sessionId, toDeviceId)
 	return toMpcExecRes(res)
 }
 
-func AuxRound3Accept(key string, from int, msgWireBytes string) *MpcResult {
-	res := aux.AuxRound3Accept(key, from, msgWireBytes)
+func AuxRound3Accept(sessionId string, recv []byte) *MpcResult {
+	res := aux.AuxRound3Accept(sessionId, recv)
 	return toMpcRes(res)
 }
 
-func AuxRound3Finish(key string) *MpcResult {
-	res := aux.AuxRound3Finish(key)
+func AuxRound3Finish(sessionId string) *MpcResult {
+	res := aux.AuxRound3Finish(sessionId)
 	return toMpcRes(res)
 }
 
-// chainCodes: hex string array
-func AuxRound4Exec(key string) *MpcExecResult {
-	res := aux.AuxRound4Exec(key)
+func AuxRound4Exec(sessionId string) *MpcExecResult {
+	res := aux.AuxRound4Exec(sessionId)
 	return toMpcExecRes(res)
 }

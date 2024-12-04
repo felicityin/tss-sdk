@@ -15,8 +15,8 @@ import (
 	u "tss-sdk/tss/protocols/utils"
 )
 
-func AuxRound3Exec(key string) (result u.TssResult) {
-	round, err := GetParty(key)
+func AuxRound3Exec(sessionId string) (result u.TssResult) {
+	round, err := GetParty(sessionId)
 	if err != nil {
 		result.Err = err.Error()
 		return
@@ -52,8 +52,8 @@ func AuxRound3Exec(key string) (result u.TssResult) {
 			result.Err = err.Error()
 			return
 		}
-		if err := round.verifyPrmPubkeys(j, prmProof); err != nil {
-			err = fmt.Errorf("verifyPrmPubkeys err: %s", err.Error())
+		if err := round.verifyPrmPubsessionIds(j, prmProof); err != nil {
+			err = fmt.Errorf("verifyPrmPubsessionIds err: %s", err.Error())
 			common.Logger.Errorf("%s", err.Error())
 			result.Err = err.Error()
 			return
@@ -134,14 +134,14 @@ func AuxRound3Exec(key string) (result u.TssResult) {
 			result.Err = err.Error()
 			return
 		}
-		msgWireBytes, _, err := r3msg.WireBytes()
+		msgWireBytes, router, err := r3msg.WireBytes()
 		if err != nil {
-			err = fmt.Errorf("get msg wire bytes error: %s", key)
+			err = fmt.Errorf("get msg wire bytes error: %s", sessionId)
 			common.Logger.Errorf("%s", err.Error())
 			result.Err = err.Error()
 			return
 		}
-		round.temp.send.auxRound3Messages[j] = msgWireBytes
+		round.temp.send.auxRound3Messages[j] = u.MpcP2pMsg(round.sessionId, round.sessionKind, Pj.Id, router, msgWireBytes)
 		if j == i {
 			round.temp.auxRound3Messages[i] = r3msg
 		}
@@ -150,7 +150,7 @@ func AuxRound3Exec(key string) (result u.TssResult) {
 	return result
 }
 
-func (round *LocalParty) verifyPrmPubkeys(j int, msg *prmproof.RingPederssenParameterMessage) error {
+func (round *LocalParty) verifyPrmPubsessionIds(j int, msg *prmproof.RingPederssenParameterMessage) error {
 	n := new(big.Int).SetBytes(msg.N)
 	s := new(big.Int).SetBytes(msg.S)
 	t := new(big.Int).SetBytes(msg.T)
@@ -172,26 +172,34 @@ func (round *LocalParty) verifyPrmPubkeys(j int, msg *prmproof.RingPederssenPara
 	return nil
 }
 
-func GetRound3Msg(key string, to int) (result u.TssExecResult) {
-	party, err := GetParty(key)
+func GetRound3Msg(sessionId string, toDeviceId string) (result u.TssExecResult) {
+	party, err := GetParty(sessionId)
 	if err != nil {
 		result.Err = err.Error()
 		return
 	}
+
+	to, exists := party.deviceToPartyIndex[toDeviceId]
+	if !exists {
+		result.Err = fmt.Sprintf("device id %s is not in group %+v", toDeviceId, party.deviceToPartyIndex)
+		return
+	}
+
 	result.Ok = true
-	result.MsgWireBytes = party.temp.send.auxRound3Messages[to]
+	result.Msg = party.temp.send.auxRound3Messages[to]
 	return
 }
 
-func AuxRound3Accept(key string, from int, msgWireBytes string) (result u.TssResult) {
-	party, err := GetParty(key)
+func AuxRound3Accept(sessionId string, recv []byte) (result u.TssResult) {
+	party, err := GetParty(sessionId)
 	if err != nil {
 		result.Err = err.Error()
 		return
 	}
 
-	msg, err := u.ParseRecvMsg(msgWireBytes)
+	msg, from, err := u.ParseMpcMsg(recv, sessionId)
 	if err != nil {
+		common.Logger.Errorf("parse recv msg err: %s", err.Error())
 		result.Err = err.Error()
 		return
 	}
@@ -207,8 +215,8 @@ func AuxRound3Accept(key string, from int, msgWireBytes string) (result u.TssRes
 	return
 }
 
-func AuxRound3Finish(key string) (result u.TssResult) {
-	party, err := GetParty(key)
+func AuxRound3Finish(sessionId string) (result u.TssResult) {
+	party, err := GetParty(sessionId)
 	if err != nil {
 		result.Err = err.Error()
 		return

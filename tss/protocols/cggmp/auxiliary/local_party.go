@@ -24,6 +24,10 @@ type (
 
 		number int
 		ok     []bool
+
+		sessionId          string
+		sessionKind        string
+		deviceToPartyIndex map[string]int
 	}
 
 	localMessageStore struct {
@@ -58,10 +62,11 @@ var Parties = map[string]*LocalParty{}
 
 // Exported, used in `tss` client
 func NewLocalParty(
-	key string,
-	partyIndex int,
-	partyCount int,
-	pIDs []string,
+	sessionId string,
+	sessionKind string,
+	deviceId string,
+	partyDevices []string,
+	connIds []uint64,
 ) (result utils.TssResult) {
 	if err := log.SetLogLevel("tss-lib", "info"); err != nil {
 		common.Logger.Errorf("set log level, err: %s", err.Error())
@@ -69,23 +74,24 @@ func NewLocalParty(
 		return
 	}
 
-	uIds := make(tss.UnSortedPartyIDs, 0, partyCount)
-	for i := 0; i < partyCount; i++ {
-		pId, _ := new(big.Int).SetString(pIDs[i], 10)
-		common.Logger.Infof("id: %d", pId)
-		uIds = append(uIds, tss.NewPartyID(fmt.Sprintf("%d", i), fmt.Sprintf("m_%d", i), pId))
-	}
-	ids := tss.SortPartyIDs(uIds)
+	partyCount := len(partyDevices)
+	partyIndexs, pIds := utils.SortPartys(deviceId, partyDevices, connIds)
+	p2pCtx := tss.NewPeerContext(pIds)
 
-	p2pCtx := tss.NewPeerContext(ids)
-	params := tss.NewParameters(nil, p2pCtx, ids[partyIndex], partyCount, partyCount)
+	partyIndex := partyIndexs[deviceId]
+	common.Logger.Infof("party index: %d", partyIndex)
+
+	params := tss.NewParameters(nil, p2pCtx, pIds[partyIndex], partyCount, partyCount)
 
 	p := &LocalParty{
-		BaseParty: new(tss.BaseParty),
-		params:    params,
-		temp:      localTempData{},
-		save:      NewLocalPartySaveData(partyCount),
-		ok:        make([]bool, partyCount),
+		BaseParty:          new(tss.BaseParty),
+		params:             params,
+		temp:               localTempData{},
+		save:               NewLocalPartySaveData(partyCount),
+		ok:                 make([]bool, partyCount),
+		sessionId:          sessionId,
+		sessionKind:        sessionKind,
+		deviceToPartyIndex: partyIndexs,
 	}
 
 	// msgs init
@@ -97,23 +103,23 @@ func NewLocalParty(
 	// temp data init
 	p.temp.V = make([][]byte, partyCount)
 
-	Parties[key] = p
+	Parties[sessionId] = p
 	result.Ok = true
 	return
 }
 
-func RemoveAuxParty(key string) bool {
-	if _, ok := Parties[key]; !ok {
+func RemoveAuxParty(sessionId string) bool {
+	if _, ok := Parties[sessionId]; !ok {
 		return false
 	}
-	delete(Parties, key)
+	delete(Parties, sessionId)
 	return true
 }
 
-func GetParty(key string) (*LocalParty, error) {
-	party, ok := Parties[key]
+func GetParty(sessionId string) (*LocalParty, error) {
+	party, ok := Parties[sessionId]
 	if !ok {
-		err := fmt.Errorf("party not found: %s", key)
+		err := fmt.Errorf("party not found: %s", sessionId)
 		common.Logger.Errorf("%s", err.Error())
 		return nil, err
 	}
