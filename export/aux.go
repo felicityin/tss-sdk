@@ -13,10 +13,10 @@ func NewAuxLocalParty(
 	sessionId string,
 	sessionKind string,
 	deviceId string,
-	partyDevices string, // comma separated
+	allDevices string, // comma separated
 	connIds string, // comma separated
 ) *MpcResult {
-	parties, connectIds, err := parseParties(partyDevices, connIds)
+	parties, connectIds, err := parseParties(allDevices, connIds)
 	if err != nil {
 		return &MpcResult{Ok: false, Err: err.Error()}
 	}

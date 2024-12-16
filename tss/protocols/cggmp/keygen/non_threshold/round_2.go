@@ -38,11 +38,11 @@ func KeygenRound2Exec(sessionId string) (result utils.TssExecResult) {
 	)
 	round.temp.kgRound2Messages[i] = msg
 
-	var err error
 	msgWireBytes, router, err := msg.WireBytes()
 	if err != nil {
-		common.Logger.Errorf("get msg wire bytes error: %s", sessionId)
-		result.Err = fmt.Sprintf("get msg wire bytes error: %s", sessionId)
+		err := fmt.Sprintf("get msg wire bytes error: %s", err.Error())
+		common.Logger.Error(err)
+		result.Err = err
 		return
 	}
 

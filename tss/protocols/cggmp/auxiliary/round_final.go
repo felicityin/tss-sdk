@@ -71,6 +71,6 @@ func AuxRound4Exec(sessionId string) (result utils.TssExecResult) {
 		return
 	}
 	result.Ok = true
-	result.MsgWireBytes = saveBytes
+	result.Msg = saveBytes
 	return result
 }

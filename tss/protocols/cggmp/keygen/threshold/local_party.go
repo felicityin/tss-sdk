@@ -11,13 +11,9 @@ import (
 	cmt "tss-sdk/tss/crypto/commitments"
 	"tss-sdk/tss/crypto/vss"
 	save "tss-sdk/tss/protocols/cggmp/keygen"
+	"tss-sdk/tss/protocols/utils"
 	"tss-sdk/tss/tss"
 )
-
-// Implements Party
-// Implements Stringer
-var _ tss.Party = (*LocalParty)(nil)
-var _ fmt.Stringer = (*LocalParty)(nil)
 
 type (
 	LocalParty struct {
@@ -27,9 +23,12 @@ type (
 		temp localTempData
 		data save.LocalPartySaveData
 
-		// outbound messaging
-		out chan<- tss.Message
-		end chan<- *save.LocalPartySaveData
+		number int
+		ok     []bool
+
+		sessionId          string
+		sessionKind        string
+		deviceToPartyIndex map[string]int
 	}
 
 	localMessageStore struct {
@@ -39,9 +38,14 @@ type (
 		kgRound3Messages []tss.ParsedMessage
 	}
 
+	sendMessageStore struct {
+		kgRound2Message2s [][]byte // msg.WireBytes()
+	}
+
 	// temp data (thrown away after keygen)
 	localTempData struct {
 		localMessageStore
+		send sendMessageStore
 
 		s0            *big.Int
 		KGCs          []cmt.HashCommitment
@@ -65,27 +69,63 @@ type (
 	}
 )
 
+var Parties = map[string]*LocalParty{}
+
 // Exported, used in `tss` client
 func NewLocalParty(
-	params *tss.Parameters,
-	out chan<- tss.Message,
-	end chan<- *save.LocalPartySaveData,
-) tss.Party {
+	algo string, // ecdsa or eddsa
+	sessionId string,
+	sessionKind string,
+	deviceId string,
+	allDevices []string,
+	connIds []uint64,
+	rootPrivKey string, // hex string
+	chainCode string, // hex string
+) (result utils.TssResult) {
 	if err := log.SetLogLevel("tss-lib", "info"); err != nil {
 		common.Logger.Errorf("set log level, err: %s", err.Error())
-		return nil
+		result.Err = fmt.Sprintf("set log level, err: %s", err.Error())
+		return
 	}
-	tss.SetCurve(tss.S256())
 
-	partyCount := params.PartyCount()
+	if algo == "ecdsa" {
+		tss.SetCurve(tss.S256())
+	} else if algo == "eddsa" {
+		tss.SetCurve(tss.Edwards())
+	} else {
+		common.Logger.Errorf("unknown alog: %s", algo)
+		result.Err = fmt.Sprintf("unknown alog: %s", algo)
+		return
+	}
+
+	partyCount := len(allDevices)
+	partyIndexs, pIds := utils.SortPartys(deviceId, allDevices, connIds)
+	p2pCtx := tss.NewPeerContext(pIds)
+
+	partyIndex := partyIndexs[deviceId]
+	common.Logger.Infof("party index: %d", partyIndex)
+
+	var params *tss.Parameters
+	if algo == "ecdsa" {
+		params = tss.NewParameters(tss.S256(), p2pCtx, pIds[partyIndex], partyCount, partyCount)
+	} else if algo == "eddsa" {
+		params = tss.NewParameters(tss.Edwards(), p2pCtx, pIds[partyIndex], partyCount, partyCount)
+	} else {
+		common.Logger.Errorf("unknown algo: %s", algo)
+		result.Err = fmt.Sprintf("unknown algo: %s", algo)
+		return
+	}
+
 	data := save.NewLocalPartySaveData(partyCount)
 	p := &LocalParty{
-		BaseParty: new(tss.BaseParty),
-		params:    params,
-		temp:      localTempData{},
-		data:      data,
-		out:       out,
-		end:       end,
+		BaseParty:          new(tss.BaseParty),
+		params:             params,
+		temp:               localTempData{},
+		data:               data,
+		ok:                 make([]bool, partyCount),
+		sessionId:          sessionId,
+		sessionKind:        sessionKind,
+		deviceToPartyIndex: partyIndexs,
 	}
 
 	// msgs init
@@ -93,69 +133,40 @@ func NewLocalParty(
 	p.temp.kgRound2Message1s = make([]tss.ParsedMessage, partyCount)
 	p.temp.kgRound2Message2s = make([]tss.ParsedMessage, partyCount)
 	p.temp.kgRound3Messages = make([]tss.ParsedMessage, partyCount)
+	p.temp.send.kgRound2Message2s = make([][]byte, partyCount)
 
 	// temp data init
 	p.temp.KGCs = make([]cmt.HashCommitment, partyCount)
 	p.temp.commitedA = make([]*crypto.ECPoint, partyCount)
 	p.temp.V = make([][]byte, partyCount)
-	return p
+
+	Parties[sessionId] = p
+	result.Ok = true
+	return
 }
 
-func (p *LocalParty) FirstRound() tss.Round {
-	return newRound1(p.params, &p.data, &p.temp, p.out, p.end)
-}
-
-func (p *LocalParty) Start() *tss.Error {
-	return tss.BaseStart(p, TaskName)
-}
-
-func (p *LocalParty) Update(msg tss.ParsedMessage) (ok bool, err *tss.Error) {
-	return tss.BaseUpdate(p, msg, TaskName)
-}
-
-func (p *LocalParty) UpdateFromBytes(wireBytes []byte, from *tss.PartyID, isBroadcast bool) (bool, *tss.Error) {
-	msg, err := tss.ParseWireMessage(wireBytes, from, isBroadcast)
-	if err != nil {
-		return false, p.WrapError(err)
+func GetParty(sessionId string) (*LocalParty, error) {
+	party, ok := Parties[sessionId]
+	if !ok {
+		err := fmt.Errorf("party not found: %s", sessionId)
+		common.Logger.Errorf("%s", err.Error())
+		return nil, err
 	}
-	return p.Update(msg)
+	return party, nil
 }
 
-func (p *LocalParty) ValidateMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
-	if ok, err := p.BaseParty.ValidateMessage(msg); !ok || err != nil {
-		return ok, err
+func RemoveParty(sessionId string) bool {
+	if _, ok := Parties[sessionId]; !ok {
+		return false
 	}
-	// check that the message's "from index" will fit into the array
-	if maxFromIdx := p.params.PartyCount() - 1; maxFromIdx < msg.GetFrom().Index {
-		return false, p.WrapError(fmt.Errorf("received msg with a sender index too great (%d <= %d)",
-			p.params.PartyCount(), msg.GetFrom().Index), msg.GetFrom())
-	}
-	return true, nil
+	delete(Parties, sessionId)
+	return true
 }
 
-func (p *LocalParty) StoreMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
-	// ValidateBasic is cheap; double-check the message here in case the public StoreMessage was called externally
-	if ok, err := p.ValidateMessage(msg); !ok || err != nil {
-		return ok, err
+func (p *LocalParty) resetOK() {
+	for j := range p.ok {
+		p.ok[j] = false
 	}
-	fromPIdx := msg.GetFrom().Index
-
-	// switch/case is necessary to store any messages beyond current round
-	// this does not handle message replays. we expect the caller to apply replay and spoofing protection.
-	switch msg.Content().(type) {
-	case *TKgRound1Message:
-		p.temp.kgRound1Messages[fromPIdx] = msg
-	case *TKgRound2Message1:
-		p.temp.kgRound2Message1s[fromPIdx] = msg
-	case *TKgRound2Message2:
-		p.temp.kgRound2Message2s[fromPIdx] = msg
-	case *TKgRound3Message:
-		p.temp.kgRound3Messages[fromPIdx] = msg
-	default: // unrecognised message, just ignore!
-		common.Logger.Warnf("unrecognised message ignored: %v", msg)
-		return false, nil
-	}
-	return true, nil
 }
 
 func (p *LocalParty) PartyID() *tss.PartyID {
@@ -166,6 +177,15 @@ func (p *LocalParty) String() string {
 	return fmt.Sprintf("id: %s, %s", p.PartyID(), p.BaseParty.String())
 }
 
-func (p *LocalParty) SetNewSecretX(x *big.Int) {
+func (p *LocalParty) SetSecretX(x *big.Int) {
 	p.data.PrivXi = x
+}
+
+func (p *LocalParty) SetChainCode(x *big.Int) {
+	p.data.ChainCode = x
+}
+
+// get ssid from local params
+func (p *LocalParty) getSSID() ([]byte, error) {
+	return []byte("threshold-keygen"), nil
 }

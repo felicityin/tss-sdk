@@ -85,8 +85,9 @@ func KeygenRound1Exec(sessionId string) (result utils.TssExecResult) {
 func KeygenRound1Accept(sessionId string, recv []byte) (result utils.TssResult) {
 	party, ok := Parties[sessionId]
 	if !ok {
-		common.Logger.Errorf("party not found: %s", sessionId)
-		result.Err = fmt.Sprintf("party not found: %s", sessionId)
+		err := fmt.Sprintf("party not found: %s", sessionId)
+		common.Logger.Error(err)
+		result.Err = err
 		return
 	}
 

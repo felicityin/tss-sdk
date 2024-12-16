@@ -54,7 +54,7 @@ func TestCreate(t *testing.T) {
 		ids = append(ids, common.GetRandomPositiveInt(rand.Reader, tss.EC().Params().N))
 	}
 
-	vs, _, err := Create(tss.EC(), threshold, secret, ids, rand.Reader)
+	vs, _, err := Create(tss.EC(), threshold, secret, ids)
 	assert.Nil(t, err)
 
 	assert.Equal(t, threshold+1, len(vs))
@@ -82,7 +82,7 @@ func TestVerify(t *testing.T) {
 		ids = append(ids, common.GetRandomPositiveInt(rand.Reader, tss.EC().Params().N))
 	}
 
-	vs, shares, err := Create(tss.EC(), threshold, secret, ids, rand.Reader)
+	vs, shares, err := Create(tss.EC(), threshold, secret, ids)
 	assert.NoError(t, err)
 
 	for i := 0; i < num; i++ {
@@ -100,7 +100,7 @@ func TestReconstruct(t *testing.T) {
 		ids = append(ids, common.GetRandomPositiveInt(rand.Reader, tss.EC().Params().N))
 	}
 
-	_, shares, err := Create(tss.EC(), threshold, secret, ids, rand.Reader)
+	_, shares, err := Create(tss.EC(), threshold, secret, ids)
 	assert.NoError(t, err)
 
 	secret2, err2 := shares[:threshold-1].ReConstruct(tss.EC())

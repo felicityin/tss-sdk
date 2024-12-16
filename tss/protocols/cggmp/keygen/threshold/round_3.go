@@ -2,7 +2,6 @@ package keygen
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"math/big"
 	"strconv"
@@ -13,21 +12,22 @@ import (
 	"tss-sdk/tss/crypto/commitments"
 	"tss-sdk/tss/crypto/schnorr"
 	"tss-sdk/tss/crypto/vss"
-	"tss-sdk/tss/tss"
+	u "tss-sdk/tss/protocols/utils"
 )
 
-func (round *round3) Start() *tss.Error {
-	if round.started {
-		return round.WrapError(errors.New("round 3 already started"))
+func KeygenRound3Exec(sessionId string) (result u.TssExecResult) {
+	round, err := GetParty(sessionId)
+	if err != nil {
+		result.Err = err.Error()
+		return
 	}
 	round.number = 3
-	round.started = true
 	round.resetOK()
 
 	i := round.PartyID().Index
 	common.Logger.Infof("party: %d, round_3 start", i)
 
-	pjVss := make([]vss.Vs, round.PartyCount())
+	pjVss := make([]vss.Vs, round.params.PartyCount())
 	xi := new(big.Int).Set(round.temp.shares[i].Share)
 
 	for j, msg := range round.temp.kgRound2Message1s {
@@ -39,7 +39,10 @@ func (round *round3) Start() *tss.Error {
 
 		commitmentA, err := r2msg1.UnmarshalSchCommitment()
 		if err != nil {
-			return round.WrapError(fmt.Errorf("[j: %d] unmalshal commitment failed", j))
+			err := fmt.Sprintf("[j: %d] unmalshal commitment failed", j)
+			common.Logger.Error(err)
+			result.Err = err
+			return
 		}
 		round.temp.commitedA[j] = commitmentA
 
@@ -47,27 +50,35 @@ func (round *round3) Start() *tss.Error {
 		cmtDeCmt := commitments.HashCommitDecommit{C: round.temp.KGCs[j], D: KGDj}
 		ok, flatPolyGs := cmtDeCmt.DeCommit()
 		if !ok || flatPolyGs == nil {
-			return round.WrapError(fmt.Errorf("[j: %d] de-commitment verify failed", j))
+			err := fmt.Sprintf("[j: %d] de-commitment verify failed", j)
+			common.Logger.Error(err)
+			result.Err = err
+			return
 		}
 
-		PjVs, err := crypto.UnFlattenECPoints(round.Params().EC(), flatPolyGs)
+		PjVs, err := crypto.UnFlattenECPoints(round.params.EC(), flatPolyGs)
 		if err != nil {
-			return round.WrapError(fmt.Errorf("[j: %d] UnFlattenECPoints err: %s", j, err.Error()))
+			err := fmt.Sprintf("[j: %d] UnFlattenECPoints err: %s", j, err.Error())
+			common.Logger.Error(err)
+			result.Err = err
+			return
 		}
 		pjVss[j] = PjVs
 
 		if !bytes.Equal(r2msg1.GetSsid(), round.temp.ssid) {
-			common.Logger.Errorf("[%d] payload.ssid != round.temp.ssid", j)
-			return round.WrapError(fmt.Errorf("[%d] ssid verify failed", j))
+			err := fmt.Sprintf("[%d] payload.ssid != round.temp.ssid", j)
+			common.Logger.Error(err)
+			result.Err = err
+			return
 		}
 
 		// Verify commited V_j
 		common.Logger.Debugf("[j: %d]round_3, calc V", j)
 		Vj := common.SHA512_256(
 			r2msg1.GetSsid(),
-			[]byte(strconv.Itoa(round.PartyCount())),
+			[]byte(strconv.Itoa(round.params.PartyCount())),
 			[]byte(strconv.Itoa(j)),
-			[]byte(strconv.Itoa(round.Threshold())),
+			[]byte(strconv.Itoa(round.params.Threshold())),
 			r2msg1.GetSrid(),
 			cmtDeCmt.C.Bytes(),
 			commitmentA.X().Bytes(),
@@ -76,19 +87,24 @@ func (round *round3) Start() *tss.Error {
 			r2msg1.GetChainCode(),
 		)
 		if !bytes.Equal(Vj, round.temp.V[j]) {
-			common.Logger.Errorf("[j: %d] hash != V", j)
-			return round.WrapError(fmt.Errorf("[%d] commited v_i verify failed", j))
+			err := fmt.Sprintf("[j: %d] hash != V", j)
+			common.Logger.Error(err)
+			result.Err = err
+			return
 		}
 
 		r2msg2 := round.temp.kgRound2Message2s[j].Content().(*TKgRound2Message2)
 		share := r2msg2.UnmarshalShare()
 		PjShare := vss.Share{
-			Threshold: round.Threshold(),
+			Threshold: round.params.Threshold(),
 			ID:        round.PartyID().KeyInt(),
 			Share:     share,
 		}
-		if ok = PjShare.Verify(round.Params().EC(), round.Threshold(), PjVs); !ok {
-			return round.WrapError(fmt.Errorf("[j: %d] vss verify failed", j))
+		if ok = PjShare.Verify(round.params.EC(), round.params.Threshold(), PjVs); !ok {
+			err := fmt.Sprintf("[j: %d] vss verify failed", j)
+			common.Logger.Error(err)
+			result.Err = err
+			return
 		}
 
 		// Calculate private key
@@ -100,11 +116,11 @@ func (round *round3) Start() *tss.Error {
 		round.temp.chainCode = utils.Xor(round.temp.chainCode, r2msg1.GetChainCode())
 	}
 
-	round.save.PrivXi = xi.Mod(xi, round.Params().EC().Params().N)
-	round.save.ChainCode = new(big.Int).SetBytes(round.temp.chainCode)
+	round.data.PrivXi = xi.Mod(xi, round.params.EC().Params().N)
+	round.data.ChainCode = new(big.Int).SetBytes(round.temp.chainCode)
 
 	// Ours
-	Vc := make(vss.Vs, round.Threshold()+1)
+	Vc := make(vss.Vs, round.params.Threshold()+1)
 	for c := range Vc {
 		Vc[c] = round.temp.vs[c]
 	}
@@ -112,16 +128,18 @@ func (round *round3) Start() *tss.Error {
 	// Compute F(x)
 	{
 		var err error
-		for j := 0; j < round.PartyCount(); j++ {
+		for j := 0; j < round.params.PartyCount(); j++ {
 			if j == i {
 				continue
 			}
 			PjVs := pjVss[j]
-			for c := 0; c <= round.Threshold(); c++ {
+			for c := 0; c <= round.params.Threshold(); c++ {
 				Vc[c], err = Vc[c].Add(PjVs[c])
 				if err != nil {
-					common.Logger.Errorf("calc F(x) err: %s", err.Error())
-					return round.WrapError(fmt.Errorf("calc F(x) err: %s", err.Error()))
+					err := fmt.Sprintf("calc F(x) err: %s", err.Error())
+					common.Logger.Error(err)
+					result.Err = err
+					return
 				}
 			}
 		}
@@ -130,40 +148,46 @@ func (round *round3) Start() *tss.Error {
 	// Compute Xj for each Pj
 	{
 		var err error
-		modQ := common.ModInt(round.Params().EC().Params().N)
-		bigXj := round.save.PubXj
-		for j := 0; j < round.PartyCount(); j++ {
-			Pj := round.Parties().IDs()[j]
+		modQ := common.ModInt(round.params.EC().Params().N)
+		bigXj := round.data.PubXj
+		for j := 0; j < round.params.PartyCount(); j++ {
+			Pj := round.params.Parties().IDs()[j]
 			kj := Pj.KeyInt()
 			BigXj := Vc[0]
 			z := new(big.Int).SetInt64(int64(1))
-			for c := 1; c <= round.Threshold(); c++ {
+			for c := 1; c <= round.params.Threshold(); c++ {
 				z = modQ.Mul(z, kj)
 				BigXj, err = BigXj.Add(Vc[c].ScalarMult(z))
 				if err != nil {
-					return round.WrapError(errors.New("adding Vc[c].ScalarMult(z) to BigXj resulted in a point not on the curve"))
+					err := fmt.Sprintf("adding Vc[c].ScalarMult(z) to BigXj resulted in a point not on the curve")
+					common.Logger.Error(err)
+					result.Err = err
+					return
 				}
 			}
 			bigXj[j] = BigXj
 		}
-		round.save.PubXj = bigXj
+		round.data.PubXj = bigXj
 	}
 
 	// Compute and save the public key
-	pubKey, err := crypto.NewECPoint(round.Params().EC(), Vc[0].X(), Vc[0].Y())
+	pubKey, err := crypto.NewECPoint(round.params.EC(), Vc[0].X(), Vc[0].Y())
 	if err != nil {
-		return round.WrapError(fmt.Errorf("public key is not on the curve: %s", err.Error()))
+		err := fmt.Sprintf("public key is not on the curve: %s", err.Error())
+		common.Logger.Error(err)
+		result.Err = err
+		return
 	}
-	round.save.Pubkey = pubKey
+	round.data.Pubkey = pubKey
 
 	common.Logger.Debugf("party: %d, round_3, calc challenge", i)
 	challenge := common.RejectionSample(
-		round.EC().Params().N,
+		round.params.EC().Params().N,
 		common.SHA512_256i_TAGGED(
 			append(round.temp.ssid, round.temp.srid...),
 			big.NewInt(int64(i)),
-			round.save.PubXj[i].X(),
-			round.save.PubXj[i].Y(),
+			round.data.PubXj[i].X(),
+			round.data.PubXj[i].Y(),
 			round.temp.commitedA[i].X(),
 			round.temp.commitedA[i].Y(),
 		),
@@ -171,41 +195,68 @@ func (round *round3) Start() *tss.Error {
 
 	// Generate schnorr proof
 	common.Logger.Debugf("party: %d, round_3, calc schnorr proof", i)
-	schProof := schnorr.Prove(round.EC().Params().N, round.temp.tau, challenge, round.save.PrivXi)
+	schProof := schnorr.Prove(round.params.EC().Params().N, round.temp.tau, challenge, round.data.PrivXi)
 
 	// BROADCAST proofs
 	common.Logger.Infof("party: %d, round_3 broadcast", i)
 	{
 		msg := NewKGRound3Message(round.PartyID(), schProof.Proof.Bytes())
 		round.temp.kgRound3Messages[i] = msg
-		round.out <- msg
+
+		msgWireBytes, router, err := msg.WireBytes()
+		if err != nil {
+			err := fmt.Sprintf("get msg wire bytes error: %s", err.Error())
+			common.Logger.Error(err)
+			result.Err = err
+			return
+		}
+
+		result.Ok = true
+		result.Msg = u.MpcBroadcastMsg(round.sessionId, round.sessionKind, router, msgWireBytes)
 	}
-	return nil
+	return
 }
 
-func (round *round3) CanAccept(msg tss.ParsedMessage) bool {
-	if _, ok := msg.Content().(*TKgRound3Message); ok {
-		return msg.IsBroadcast()
+func KeygenRound3Accept(sessionId string, recv []byte) (result u.TssResult) {
+	party, err := GetParty(sessionId)
+	if err != nil {
+		result.Err = err.Error()
+		return
 	}
-	return false
+
+	msg, from, err := u.ParseMpcMsg(recv, sessionId)
+	if err != nil {
+		common.Logger.Errorf("parse recv r2msg err: %s", err.Error())
+		result.Err = err.Error()
+		return
+	}
+
+	if _, ok := msg.Content().(*TKgRound3Message); !ok {
+		result.Err = fmt.Sprintf("not TKgRound3Message, err: %s", err.Error())
+		return
+	}
+
+	result.Ok = true
+	party.temp.kgRound3Messages[from] = msg
+	return
 }
 
-func (round *round3) Update() (bool, *tss.Error) {
-	ret := true
-	for j, msg := range round.temp.kgRound3Messages {
-		if round.ok[j] {
+func KeygenRound3Finish(sessionId string) (result u.TssResult) {
+	party, err := GetParty(sessionId)
+	if err != nil {
+		result.Err = err.Error()
+		return
+	}
+
+	for j, msg := range party.temp.kgRound3Messages {
+		if j == party.PartyID().Index {
 			continue
 		}
-		if msg == nil || !round.CanAccept(msg) {
-			ret = false
-			continue
+		if msg == nil {
+			result.Err = fmt.Sprintf("r3msg is null: %d", j)
+			return
 		}
-		round.ok[j] = true
 	}
-	return ret, nil
-}
-
-func (round *round3) NextRound() tss.Round {
-	round.started = false
-	return &round4{round}
+	result.Ok = true
+	return
 }

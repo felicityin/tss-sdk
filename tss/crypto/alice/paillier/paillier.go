@@ -7,10 +7,10 @@ import (
 	"errors"
 	"math/big"
 
+	"github.com/golang/protobuf/proto"
+
 	"tss-sdk/tss/crypto/alice/utils"
 	"tss-sdk/tss/crypto/alice/zkproof"
-
-	"github.com/golang/protobuf/proto"
 )
 
 const (

@@ -1,7 +1,7 @@
 package keygen
 
 import (
-	"errors"
+	"fmt"
 	"math/big"
 	"strconv"
 
@@ -9,86 +9,83 @@ import (
 	"tss-sdk/tss/crypto"
 	cmts "tss-sdk/tss/crypto/commitments"
 	"tss-sdk/tss/crypto/vss"
-	save "tss-sdk/tss/protocols/cggmp/keygen"
-	"tss-sdk/tss/tss"
+	"tss-sdk/tss/protocols/utils"
 )
 
 var zero = big.NewInt(0)
 
-// round 1 represents round 1 of the keygen part of the TSS spec
-func newRound1(
-	params *tss.Parameters,
-	save *save.LocalPartySaveData,
-	temp *localTempData,
-	out chan<- tss.Message,
-	end chan<- *save.LocalPartySaveData,
-) tss.Round {
-	return &round1{
-		&base{params, save, temp, out, end, make([]bool, len(params.Parties().IDs())), false, 1},
-	}
-}
-
-func (round *round1) Start() *tss.Error {
-	if round.started {
-		return round.WrapError(errors.New("round 1 already started"))
+func KeygenRound1Exec(sessionId string) (result utils.TssExecResult) {
+	round, err := GetParty(sessionId)
+	if err != nil {
+		result.Err = err.Error()
+		return
 	}
 	round.number = 1
-	round.started = true
 	round.resetOK()
 
 	Pi := round.PartyID()
 	i := Pi.Index
 	common.Logger.Infof("party: %d, round_1 start", i)
 
-	// Calculate "partial" key share s0
-	s0 := common.GetRandomPositiveInt(round.PartialKeyRand(), round.EC().Params().N)
-	round.temp.s0 = s0
+	if round.data.PrivXi == nil {
+		round.data.PrivXi = common.GetRandomPositiveInt(round.params.PartialKeyRand(), round.params.EC().Params().N)
+	}
+	if round.data.ChainCode == nil {
+		round.temp.chainCode, _ = common.GetRandomBytes(round.params.Rand(), 32)
+	} else {
+		round.temp.chainCode = round.data.ChainCode.Bytes()
+	}
+
+	// "partial" key share s0
+	round.temp.s0 = round.data.PrivXi
 
 	// Compute the vss shares
-	ids := round.Parties().IDs().Keys()
-	vs, shares, err := vss.Create(round.EC(), round.Threshold(), s0, ids, round.Rand())
+	ids := round.params.Parties().IDs().Keys()
+	vs, shares, err := vss.Create(round.params.EC(), round.params.Threshold(), round.temp.s0, ids)
 	if err != nil {
-		return round.WrapError(err, Pi)
+		result.Err = fmt.Sprintf("vss.Create err: %s", err.Error())
+		return
 	}
-	round.save.Ks = ids
+	round.data.Ks = ids
 	round.temp.vs = vs
 	round.temp.shares = shares
-
-	// Security: the original u_i may be discarded
-	s0 = zero // clears the secret data from memory
-	_ = s0    // silences a linter warning
 
 	// Make commitment -> (C, D)
 	pGFlat, err := crypto.FlattenECPoints(vs)
 	if err != nil {
-		return round.WrapError(err, Pi)
+		err := fmt.Sprintf("crypto.FlattenECPoints err: %s", err.Error())
+		common.Logger.Error(err)
+		result.Err = err
+		return
 	}
-	polyCmt := cmts.NewHashCommitment(round.Rand(), pGFlat...)
+	polyCmt := cmts.NewHashCommitment(round.params.Rand(), pGFlat...)
 	round.temp.deCommitPolyG = polyCmt.D
 	round.temp.KGCs[i] = polyCmt.C
 
 	// Make zk-schnorr commitment
-	round.temp.tau = common.GetRandomPositiveInt(round.PartialKeyRand(), round.Params().EC().Params().N)
-	round.temp.commitedA[i] = crypto.ScalarBaseMult(round.EC(), round.temp.tau)
+	round.temp.tau = common.GetRandomPositiveInt(round.params.PartialKeyRand(), round.params.EC().Params().N)
+	round.temp.commitedA[i] = crypto.ScalarBaseMult(round.params.EC(), round.temp.tau)
 
-	round.save.ShareID = ids[i]
-	round.temp.srid, _ = common.GetRandomBytes(round.Rand(), 32)
+	round.data.ShareID = ids[i]
+	round.temp.srid, _ = common.GetRandomBytes(round.params.Rand(), 32)
 	round.temp.ssidNonce = new(big.Int).SetUint64(0)
 	ssid, err := round.getSSID()
 	if err != nil {
-		return round.WrapError(errors.New("failed to generate ssid"))
+		err := fmt.Sprintf("get ssid err: %s", err.Error())
+		common.Logger.Error(err)
+		result.Err = err
+		return
 	}
 	round.temp.ssid = ssid
 
-	round.temp.u, _ = common.GetRandomBytes(round.Rand(), 32)
-	round.temp.chainCode, _ = common.GetRandomBytes(round.Rand(), 32)
+	round.temp.u, _ = common.GetRandomBytes(round.params.Rand(), 32)
 
 	// Compute V_i
 	Vi := common.SHA512_256(
 		ssid,
-		[]byte(strconv.Itoa(round.PartyCount())),
+		[]byte(strconv.Itoa(round.params.PartyCount())),
 		[]byte(strconv.Itoa(i)),
-		[]byte(strconv.Itoa(round.Threshold())),
+		[]byte(strconv.Itoa(round.params.Threshold())),
 		round.temp.srid,
 		polyCmt.C.Bytes(),
 		round.temp.commitedA[i].X().Bytes(),
@@ -99,38 +96,67 @@ func (round *round1) Start() *tss.Error {
 
 	common.Logger.Infof("party: %d, round_1 broadcast", i)
 
-	// BROADCAST commitments
-	{
-		msg := NewKGRound1Message(round.PartyID(), Vi, polyCmt.C)
-		round.temp.kgRound1Messages[i] = msg
-		round.out <- msg
+	msg := NewKGRound1Message(round.PartyID(), Vi, polyCmt.C)
+	msgWireBytes, router, err := msg.WireBytes()
+	if err != nil {
+		err := fmt.Sprintf("get msg wire bytes error: %s", err.Error())
+		common.Logger.Error(err)
+		result.Err = err
+		return
 	}
-	return nil
+	round.temp.kgRound1Messages[i] = msg
+
+	result.Ok = true
+	result.Msg = utils.MpcBroadcastMsg(round.sessionId, round.sessionKind, router, msgWireBytes)
+	return
 }
 
-func (round *round1) CanAccept(msg tss.ParsedMessage) bool {
-	if _, ok := msg.Content().(*TKgRound1Message); ok {
-		return msg.IsBroadcast()
+func KeygenRound1Accept(sessionId string, recv []byte) (result utils.TssResult) {
+	party, ok := Parties[sessionId]
+	if !ok {
+		err := fmt.Sprintf("party not found: %s", sessionId)
+		common.Logger.Error(err)
+		result.Err = err
+		return
 	}
-	return false
+
+	msg, from, err := utils.ParseMpcMsg(recv, sessionId)
+	if err != nil {
+		common.Logger.Errorf("parse recv msg err: %s", err.Error())
+		result.Err = err.Error()
+		return
+	}
+
+	if _, ok := msg.Content().(*TKgRound1Message); !ok {
+		result.Err = fmt.Sprintf("not TKgRound1Message, err: %s", err.Error())
+		return
+	}
+
+	result.Ok = true
+	party.temp.kgRound1Messages[from] = msg
+	return
 }
 
-func (round *round1) Update() (bool, *tss.Error) {
-	ret := true
-	for j, msg := range round.temp.kgRound1Messages {
-		if round.ok[j] {
+func KeygenRound1Finish(sessionId string) (result utils.TssResult) {
+	party, ok := Parties[sessionId]
+	if !ok {
+		err := fmt.Sprintf("party not found: %s", sessionId)
+		common.Logger.Error(err)
+		result.Err = err
+		return
+	}
+
+	for j, msg := range party.temp.kgRound1Messages {
+		if j == party.PartyID().Index {
 			continue
 		}
-		if msg == nil || !round.CanAccept(msg) {
-			ret = false
-			continue
+		if msg == nil {
+			err := fmt.Sprintf("msg is null: %d", j)
+			common.Logger.Error(err)
+			result.Err = err
+			return
 		}
-		round.ok[j] = true
 	}
-	return ret, nil
-}
-
-func (round *round1) NextRound() tss.Round {
-	round.started = false
-	return &round2{round}
+	result.Ok = true
+	return
 }

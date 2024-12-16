@@ -17,12 +17,11 @@ import (
 )
 
 type TssExecResult struct {
-	Ok           bool   `json:"ok"`
-	Err          string `json:"error"`
-	Msg          []byte `json:"msg"`
-	Pubkey       string `json:"pubkey"`    // hex string. only keygen return
-	ChainCode    string `json:"chainCode"` // hex string. only keygen return
-	MsgWireBytes []byte `json:"data"`
+	Ok        bool   `json:"ok"`
+	Err       string `json:"error"`
+	Msg       []byte `json:"msg"`
+	Pubkey    string `json:"pubkey"`    // hex string. only keygen return
+	ChainCode string `json:"chainCode"` // hex string. only keygen return
 }
 
 type TssResult struct {

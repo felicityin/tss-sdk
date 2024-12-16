@@ -65,7 +65,7 @@ func NewLocalParty(
 	sessionId string,
 	sessionKind string,
 	deviceId string,
-	partyDevices []string,
+	allDevices []string,
 	connIds []uint64,
 ) (result utils.TssResult) {
 	if err := log.SetLogLevel("tss-lib", "info"); err != nil {
@@ -74,8 +74,8 @@ func NewLocalParty(
 		return
 	}
 
-	partyCount := len(partyDevices)
-	partyIndexs, pIds := utils.SortPartys(deviceId, partyDevices, connIds)
+	partyCount := len(allDevices)
+	partyIndexs, pIds := utils.SortPartys(deviceId, allDevices, connIds)
 	p2pCtx := tss.NewPeerContext(pIds)
 
 	partyIndex := partyIndexs[deviceId]

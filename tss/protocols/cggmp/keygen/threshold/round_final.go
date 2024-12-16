@@ -1,20 +1,24 @@
 package keygen
 
 import (
-	"errors"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
 	"math/big"
 
 	"tss-sdk/tss/common"
+	"tss-sdk/tss/crypto/pubkey"
 	"tss-sdk/tss/crypto/schnorr"
-	"tss-sdk/tss/tss"
+	"tss-sdk/tss/protocols/utils"
 )
 
-func (round *round4) Start() *tss.Error {
-	if round.started {
-		return round.WrapError(errors.New("round 4 already started"))
+func KeygenRound4Exec(sessionId string) (result utils.TssExecResult) {
+	round, err := GetParty(sessionId)
+	if err != nil {
+		result.Err = err.Error()
+		return
 	}
 	round.number = 4
-	round.started = true
 	round.resetOK()
 
 	i := round.PartyID().Index
@@ -27,12 +31,12 @@ func (round *round4) Start() *tss.Error {
 
 		common.Logger.Debugf("round_4 calc challenge")
 		challenge := common.RejectionSample(
-			round.EC().Params().N,
+			round.params.EC().Params().N,
 			common.SHA512_256i_TAGGED(
 				append(round.temp.ssid, round.temp.srid...),
 				big.NewInt(int64(j)),
-				round.save.PubXj[j].X(),
-				round.save.PubXj[j].Y(),
+				round.data.PubXj[j].X(),
+				round.data.PubXj[j].Y(),
 				round.temp.commitedA[j].X(),
 				round.temp.commitedA[j].Y(),
 			),
@@ -44,27 +48,31 @@ func (round *round4) Start() *tss.Error {
 
 		common.Logger.Debugf("round_4 verify proof")
 
-		if !schProof.Verify(round.temp.commitedA[j], round.save.PubXj[j], challenge) {
-			common.Logger.Errorf("schnorr proof verify failed, party: %d", j)
-			return round.WrapError(errors.New("schnorr proof verify failed"))
+		if !schProof.Verify(round.temp.commitedA[j], round.data.PubXj[j], challenge) {
+			err := fmt.Sprintf("schnorr proof verify failed, party: %d", j)
+			common.Logger.Error(err)
+			result.Err = err
+			return
 		}
 	}
 
+	saveBytes, err := json.Marshal(round.data)
+	if err != nil {
+		common.Logger.Errorf("round_4 save err: %s", err.Error())
+		result.Err = fmt.Sprintf("round_4 save err: %s", err.Error())
+		return
+	}
+
+	pk, err := pubkey.EncodeEcdsaPk(round.data.Pubkey.X(), round.data.Pubkey.Y())
+	if err != nil {
+		result.Err = fmt.Sprintf("encode ecdsa pk err: %s", err.Error())
+		return
+	}
+
 	common.Logger.Infof("party: %d, round_4 save", i)
-	round.end <- round.save
-	return nil
-}
-
-func (round *round4) CanAccept(msg tss.ParsedMessage) bool {
-	// not expecting any incoming messages in this round
-	return false
-}
-
-func (round *round4) Update() (bool, *tss.Error) {
-	// not expecting any incoming messages in this round
-	return false, nil
-}
-
-func (round *round4) NextRound() tss.Round {
-	return nil // finished!
+	result.Ok = true
+	result.Msg = saveBytes
+	result.ChainCode = hex.EncodeToString(round.data.ChainCode.Bytes())
+	result.Pubkey = pk
+	return result
 }
