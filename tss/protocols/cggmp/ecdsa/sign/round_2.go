@@ -165,12 +165,19 @@ func OnsignRound2Exec(sessionId string) (result utils.TssResult) {
 	return result
 }
 
-func GetRound2Msg(sessionId string, to int) (result utils.TssExecResult) {
+func GetRound2Msg(sessionId string, toDeviceId string) (result utils.TssExecResult) {
 	party, err := GetParty(sessionId)
 	if err != nil {
 		result.Err = err.Error()
 		return
 	}
+
+	to, exists := party.deviceToPartyIndex[toDeviceId]
+	if !exists {
+		result.Err = fmt.Sprintf("device id %s is not in group %+v", toDeviceId, party.deviceToPartyIndex)
+		return
+	}
+
 	result.Ok = true
 	result.Msg = party.temp.send.signRound2Messages[to]
 	return
@@ -185,7 +192,7 @@ func OnSignRound2MsgAccept(sessionId string, recv []byte) (result utils.TssResul
 
 	msg, from, err := utils.ParseMpcMsg(recv, sessionId)
 	if err != nil {
-		common.Logger.Errorf("parse recv r1msg err: %s", err.Error())
+		common.Logger.Errorf("parse recv r2msg err: %s", err.Error())
 		result.Err = err.Error()
 		return
 	}

@@ -1,21 +1,18 @@
 package sign
 
 import (
-	"encoding/base64"
 	"fmt"
 	"math/big"
 
 	"tss-sdk/tss/common"
 	"tss-sdk/tss/crypto"
 	"tss-sdk/tss/protocols/utils"
-	"tss-sdk/tss/tss"
 )
 
-func OnSignRound1Exec(key string) (result utils.TssExecResult) {
-	round, ok := SignParties[key]
-	if !ok {
-		common.Logger.Errorf("party not found: %s", key)
-		result.Err = fmt.Sprintf("party not found: %s", key)
+func OnSignRound1Exec(sessionId string) (result utils.TssExecResult) {
+	round, err := GetParty(sessionId)
+	if err != nil {
+		result.Err = err.Error()
 		return
 	}
 
@@ -27,7 +24,6 @@ func OnSignRound1Exec(key string) (result utils.TssExecResult) {
 	common.Logger.Infof("[sign] party: %d, round_1 start", i)
 
 	round.temp.ssidNonce = new(big.Int).SetUint64(0)
-	var err error
 	round.temp.ssid, err = round.getSSID()
 	if err != nil {
 		return
@@ -45,38 +41,30 @@ func OnSignRound1Exec(key string) (result utils.TssExecResult) {
 		common.Logger.Errorf("P[%d]: NewSignRound1Message err: %s", i, err.Error())
 		result.Err = fmt.Sprintf("P[%d]: NewSignRound1Message err: %s", i, err.Error())
 	}
-	msgWireBytes, _, err := msg.WireBytes()
+	msgWireBytes, router, err := msg.WireBytes()
 	if err != nil {
-		common.Logger.Errorf("get msg wire bytes error: %s", key)
-		result.Err = fmt.Sprintf("get msg wire bytes error: %s", key)
+		common.Logger.Errorf("get msg wire bytes error: %s", sessionId)
+		result.Err = fmt.Sprintf("get msg wire bytes error: %s", sessionId)
 		return
 	}
 	round.temp.signRound1Messages[i] = msg
 
 	result.Ok = true
-	result.MsgWireBytes = msgWireBytes
+	result.Msg = utils.MpcBroadcastMsg(round.sessionId, round.sessionKind, router, msgWireBytes)
 	return result
 }
 
-func OnSignRound1MsgAccept(key string, from int, msgWireBytes string) (result utils.TssResult) {
-	party, ok := SignParties[key]
-	if !ok {
-		common.Logger.Errorf("party not found: %s", key)
-		result.Err = fmt.Sprintf("party not found: %s", key)
+func OnSignRound1MsgAccept(sessionId string, recv []byte) (result utils.TssResult) {
+	party, err := GetParty(sessionId)
+	if err != nil {
+		result.Err = err.Error()
 		return
 	}
 
-	rMsgBytes, err := base64.StdEncoding.DecodeString(msgWireBytes)
+	msg, from, err := utils.ParseMpcMsg(recv, sessionId)
 	if err != nil {
-		common.Logger.Errorf("msg error, msg base64 decode fail, err:%s", err.Error())
-		result.Err = fmt.Sprintf("msg error, msg base64 decode fail, err:%s", err.Error())
-		return
-	}
-
-	msg, err := tss.ParseWireMsg(rMsgBytes)
-	if err != nil {
-		common.Logger.Errorf("msg error, parse wire msg fail, err:%s", err.Error())
-		result.Err = fmt.Sprintf("msg error, parse wire msg fail, err:%s", err.Error())
+		common.Logger.Errorf("parse recv r1msg err: %s", err.Error())
+		result.Err = err.Error()
 		return
 	}
 
@@ -90,11 +78,10 @@ func OnSignRound1MsgAccept(key string, from int, msgWireBytes string) (result ut
 	return
 }
 
-func OnSignRound1Finish(key string) (result utils.TssResult) {
-	party, ok := SignParties[key]
-	if !ok {
-		common.Logger.Errorf("party not found: %s", key)
-		result.Err = fmt.Sprintf("party not found: %s", key)
+func OnSignRound1Finish(sessionId string) (result utils.TssResult) {
+	party, err := GetParty(sessionId)
+	if err != nil {
+		result.Err = err.Error()
 		return
 	}
 

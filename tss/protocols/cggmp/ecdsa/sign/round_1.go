@@ -114,12 +114,19 @@ func OnSignRound1Exec(sessionId string) (result utils.TssExecResult) {
 	return result
 }
 
-func GetRound1Msg2(sessionId string, to int) (result utils.TssExecResult) {
+func GetRound1Msg2(sessionId string, toDeviceId string) (result utils.TssExecResult) {
 	party, err := GetParty(sessionId)
 	if err != nil {
 		result.Err = err.Error()
 		return
 	}
+
+	to, exists := party.deviceToPartyIndex[toDeviceId]
+	if !exists {
+		result.Err = fmt.Sprintf("device id %s is not in group %+v", toDeviceId, party.deviceToPartyIndex)
+		return
+	}
+
 	result.Ok = true
 	result.Msg = party.temp.send.signRound1Message2s[to]
 	return

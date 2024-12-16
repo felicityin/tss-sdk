@@ -14,11 +14,10 @@ import (
 	"tss-sdk/tss/protocols/utils"
 )
 
-func OnsignRound3Exec(key string) (result utils.TssExecResult) {
-	round, ok := SignParties[key]
-	if !ok {
-		common.Logger.Errorf("party not found: %s", key)
-		result.Err = fmt.Sprintf("party not found: %s", key)
+func OnsignRound3Exec(sessionId string) (result utils.TssExecResult) {
+	round, err := GetParty(sessionId)
+	if err != nil {
+		result.Err = err.Error()
 		return
 	}
 	round.number = 3
@@ -97,6 +96,6 @@ func OnsignRound3Exec(key string) (result utils.TssExecResult) {
 
 	common.Logger.Infof("party: %d, round 3 end", i)
 	result.Ok = true
-	result.MsgWireBytes = saveBytes
+	result.Msg = saveBytes
 	return result
 }

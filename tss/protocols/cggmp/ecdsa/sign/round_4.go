@@ -103,13 +103,13 @@ func OnSignRound4MsgAccept(sessionId string, recv []byte) (result utils.TssResul
 
 	msg, from, err := utils.ParseMpcMsg(recv, sessionId)
 	if err != nil {
-		common.Logger.Errorf("parse recv r1msg err: %s", err.Error())
+		common.Logger.Errorf("parse recv r4msg err: %s", err.Error())
 		result.Err = err.Error()
 		return
 	}
 
 	if _, ok := msg.Content().(*SignRound4Message); !ok {
-		result.Err = "not SignRound3Message"
+		result.Err = "not SignRound4Message"
 		return
 	}
 

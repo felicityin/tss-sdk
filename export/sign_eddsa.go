@@ -1,60 +1,63 @@
 package tssdk
 
 import (
-	"strings"
-
 	onsign "tss-sdk/tss/protocols/frost/sign"
 )
 
 func NewEddsaSignLocalParty(
-	key string,
-	partyIndex int,
-	partyCount int,
-	pIDs string,
+	isThreshold bool,
+	sessionId string,
+	sessionKind string,
+	deviceId string,
+	allDevices string, // comma separated
+	connIds string, // comma separated
 	msg string, // hex string
 	keyData string, // keygen.LocalPartySaveData, base64 string
 	walletPath string,
 ) *MpcResult {
-	ids := strings.Split(pIDs, ",")
-	res := onsign.NewLocalParty(false, key, partyIndex, partyCount, ids, msg, keyData, walletPath)
+	parties, connectIds, err := parseParties(allDevices, connIds)
+	if err != nil {
+		return &MpcResult{Ok: false, Err: err.Error()}
+	}
+	res := onsign.NewLocalParty(isThreshold, sessionId, sessionKind, deviceId, parties, connectIds, msg, keyData, walletPath)
 	return toMpcRes(res)
 }
 
-func RemoveEddsaSignParty(key string) bool {
-	return onsign.RemoveSignParty(key)
+func RemoveEddsaSignParty(sessionId string) bool {
+	return onsign.RemoveSignParty(sessionId)
 }
 
-func EddsaSignRound1Exec(key string) *MpcExecResult {
-	res := onsign.OnSignRound1Exec(key)
+func EddsaSignRound1Exec(sessionId string) *MpcExecResult {
+	res := onsign.OnSignRound1Exec(sessionId)
 	return toMpcExecRes(res)
 }
 
-func EddsaSignRound1MsgAccept(key string, from int, msgWireBytes string) *MpcResult {
-	res := onsign.OnSignRound1MsgAccept(key, from, msgWireBytes)
+func EddsaSignRound1MsgAccept(sessionId string, recv []byte) *MpcResult {
+	res := onsign.OnSignRound1MsgAccept(sessionId, recv)
 	return toMpcRes(res)
 }
 
-func EddsaSignRound1Finish(key string) *MpcResult {
-	res := onsign.OnSignRound1Finish(key)
+func EddsaSignRound1Finish(sessionId string) *MpcResult {
+	res := onsign.OnSignRound1Finish(sessionId)
 	return toMpcRes(res)
 }
 
-func EddsaSignRound2Exec(key string) *MpcExecResult {
-	res := onsign.OnsignRound2Exec(key)
+func EddsaSignRound2Exec(sessionId string) *MpcExecResult {
+	res := onsign.OnsignRound2Exec(sessionId)
 	return toMpcExecRes(res)
 }
 
-func EddsaSignRound2MsgAccept(key string, from int, msgWireBytes string) *MpcResult {
-	res := onsign.OnSignRound2MsgAccept(key, from, msgWireBytes)
+func EddsaSignRound2MsgAccept(sessionId string, recv []byte) *MpcResult {
+	res := onsign.OnSignRound2MsgAccept(sessionId, recv)
 	return toMpcRes(res)
 }
 
-func EddsaSignRound2Finish(key string) *MpcResult {
-	res := onsign.OnSignRound2Finish(key)
+func EddsaSignRound2Finish(sessionId string) *MpcResult {
+	res := onsign.OnSignRound2Finish(sessionId)
 	return toMpcRes(res)
 }
 
-func EddsaSignFinalExec(key string) *MpcExecResult {
-	res := onsign.OnsignRound3Exec(key)
+func EddsaSignFinalExec(sessionId string) *MpcExecResult {
+	res := onsign.OnsignRound3Exec(sessionId)
 	return toMpcExecRes(res)
 }

@@ -25,86 +25,86 @@ func NewEcdsaSignLocalParty(
 	return toMpcRes(res)
 }
 
-func RemoveEcdsaSignParty(key string) bool {
-	return onsign.RemoveSignParty(key)
+func RemoveEcdsaSignParty(sessionId string) bool {
+	return onsign.RemoveSignParty(sessionId)
 }
 
-func EcdsaSignRound1Exec(key string) *MpcExecResult {
-	res := onsign.OnSignRound1Exec(key)
+func EcdsaSignRound1Exec(sessionId string) *MpcExecResult {
+	res := onsign.OnSignRound1Exec(sessionId)
 	return toMpcExecRes(res)
 }
 
-func GetSignRound1Msg2(key string, to int) *MpcExecResult {
-	res := onsign.GetRound1Msg2(key, to)
+func GetSignRound1Msg2(sessionId string, toDeviceId string) *MpcExecResult {
+	res := onsign.GetRound1Msg2(sessionId, toDeviceId)
 	return toMpcExecRes(res)
 }
 
-func EcdsaSignRound1MsgAccept(key string, recv []byte) *MpcResult {
-	res := onsign.OnSignRound1MsgAccept(key, recv)
+func EcdsaSignRound1MsgAccept(sessionId string, recv []byte) *MpcResult {
+	res := onsign.OnSignRound1MsgAccept(sessionId, recv)
 	return toMpcRes(res)
 }
 
-func EcdsaSignRound1Finish(key string) *MpcResult {
-	res := onsign.OnSignRound1Finish(key)
+func EcdsaSignRound1Finish(sessionId string) *MpcResult {
+	res := onsign.OnSignRound1Finish(sessionId)
 	return toMpcRes(res)
 }
 
-func EcdsaSignRound2Exec(key string) *MpcResult {
-	res := onsign.OnsignRound2Exec(key)
+func EcdsaSignRound2Exec(sessionId string) *MpcResult {
+	res := onsign.OnsignRound2Exec(sessionId)
 	return toMpcRes(res)
 }
 
-func GetSignRound2Msg(key string, to int) *MpcExecResult {
-	res := onsign.GetRound2Msg(key, to)
+func GetSignRound2Msg(sessionId string, toDeviceId string) *MpcExecResult {
+	res := onsign.GetRound2Msg(sessionId, toDeviceId)
 	return toMpcExecRes(res)
 }
 
-func EcdsaSignRound2MsgAccept(key string, recv []byte) *MpcResult {
-	res := onsign.OnSignRound2MsgAccept(key, recv)
+func EcdsaSignRound2MsgAccept(sessionId string, recv []byte) *MpcResult {
+	res := onsign.OnSignRound2MsgAccept(sessionId, recv)
 	return toMpcRes(res)
 }
 
-func EcdsaSignRound2Finish(key string) *MpcResult {
-	res := onsign.OnSignRound2Finish(key)
+func EcdsaSignRound2Finish(sessionId string) *MpcResult {
+	res := onsign.OnSignRound2Finish(sessionId)
 	return toMpcRes(res)
 }
 
-func EcdsaSignRound3Exec(key string) *MpcResult {
-	res := onsign.OnsignRound3Exec(key)
+func EcdsaSignRound3Exec(sessionId string) *MpcResult {
+	res := onsign.OnsignRound3Exec(sessionId)
 	return toMpcRes(res)
 }
 
-func GetSignRound3Msg(key string, to int) *MpcExecResult {
-	res := onsign.GetRound3Msg(key, to)
+func GetSignRound3Msg(sessionId string, toDeviceId string) *MpcExecResult {
+	res := onsign.GetRound3Msg(sessionId, toDeviceId)
 	return toMpcExecRes(res)
 }
 
-func EcdsaSignRound3MsgAccept(key string, recv []byte) *MpcResult {
-	res := onsign.OnSignRound3MsgAccept(key, recv)
+func EcdsaSignRound3MsgAccept(sessionId string, recv []byte) *MpcResult {
+	res := onsign.OnSignRound3MsgAccept(sessionId, recv)
 	return toMpcRes(res)
 }
 
-func EcdsaSignRound3Finish(key string) *MpcResult {
-	res := onsign.OnSignRound3Finish(key)
+func EcdsaSignRound3Finish(sessionId string) *MpcResult {
+	res := onsign.OnSignRound3Finish(sessionId)
 	return toMpcRes(res)
 }
 
-func EcdsaSignRound4Exec(key string) *MpcExecResult {
-	res := onsign.OnsignRound4Exec(key)
+func EcdsaSignRound4Exec(sessionId string) *MpcExecResult {
+	res := onsign.OnsignRound4Exec(sessionId)
 	return toMpcExecRes(res)
 }
 
-func EcdsaSignRound4MsgAccept(key string, recv []byte) *MpcResult {
-	res := onsign.OnSignRound4MsgAccept(key, recv)
+func EcdsaSignRound4MsgAccept(sessionId string, recv []byte) *MpcResult {
+	res := onsign.OnSignRound4MsgAccept(sessionId, recv)
 	return toMpcRes(res)
 }
 
-func EcdsaSignRound4Finish(key string) *MpcResult {
-	res := onsign.OnSignRound4Finish(key)
+func EcdsaSignRound4Finish(sessionId string) *MpcResult {
+	res := onsign.OnSignRound4Finish(sessionId)
 	return toMpcRes(res)
 }
 
-func EcdsaSignFinalExec(key string) *MpcResult {
-	res := onsign.OnsignRound3Exec(key)
+func EcdsaSignFinalExec(sessionId string) *MpcResult {
+	res := onsign.OnsignRound3Exec(sessionId)
 	return toMpcRes(res)
 }

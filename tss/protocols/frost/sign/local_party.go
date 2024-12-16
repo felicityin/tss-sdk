@@ -28,6 +28,10 @@ type (
 
 		number int
 		ok     []bool
+
+		sessionId          string
+		sessionKind        string
+		deviceToPartyIndex map[string]int
 	}
 
 	localMessageStore struct {
@@ -62,10 +66,11 @@ var SignParties = map[string]*LocalParty{}
 
 func NewLocalParty(
 	isThreshold bool,
-	key string,
-	partyIndex int,
-	partyCount int,
-	pIDs []string,
+	sessionId string,
+	sessionKind string,
+	deviceId string,
+	allDevices []string,
+	connIds []uint64,
 	msg string, // hex string
 	keyData string, // keygen.LocalPartySaveData, base64 string
 	walletPath string,
@@ -77,15 +82,13 @@ func NewLocalParty(
 	}
 	tss.SetCurve(tss.Edwards())
 
-	uIds := make(tss.UnSortedPartyIDs, 0, partyCount)
-	for i := 0; i < partyCount; i++ {
-		pId, _ := new(big.Int).SetString(pIDs[i], 10)
-		common.Logger.Infof("id: %d", pId)
-		uIds = append(uIds, tss.NewPartyID(fmt.Sprintf("%d", i), fmt.Sprintf("m_%d", i), pId))
-	}
-	ids := tss.SortPartyIDs(uIds)
-	p2pCtx := tss.NewPeerContext(ids)
-	params := tss.NewParameters(tss.Edwards(), p2pCtx, ids[partyIndex], partyCount, partyCount)
+	partyCount := len(allDevices)
+	partyIndexs, pIds := utils.SortPartys(deviceId, allDevices, connIds)
+	p2pCtx := tss.NewPeerContext(pIds)
+
+	partyIndex := partyIndexs[deviceId]
+	common.Logger.Infof("party index: %d", partyIndex)
+	params := tss.NewParameters(tss.Edwards(), p2pCtx, pIds[partyIndex], partyCount, partyCount)
 
 	keyDataBytes, err := base64.StdEncoding.DecodeString(keyData)
 	if err != nil {
@@ -124,12 +127,15 @@ func NewLocalParty(
 	}
 
 	p := &LocalParty{
-		BaseParty: new(tss.BaseParty),
-		params:    params,
-		keys:      keys,
-		temp:      localTempData{},
-		data:      &common.SignatureData{},
-		ok:        make([]bool, partyCount),
+		BaseParty:          new(tss.BaseParty),
+		params:             params,
+		keys:               keys,
+		temp:               localTempData{},
+		data:               &common.SignatureData{},
+		ok:                 make([]bool, partyCount),
+		sessionId:          sessionId,
+		sessionKind:        sessionKind,
+		deviceToPartyIndex: partyIndexs,
 	}
 	// msgs init
 	p.temp.signRound1Messages = make([]tss.ParsedMessage, partyCount)
@@ -146,16 +152,26 @@ func NewLocalParty(
 	p.temp.isThreshold = isThreshold
 	p.temp.Rj = make([]*crypto.ECPoint, partyCount)
 
-	SignParties[key] = p
+	SignParties[sessionId] = p
 	result.Ok = true
 	return
 }
 
-func RemoveSignParty(key string) bool {
-	if _, ok := SignParties[key]; !ok {
+func GetParty(sessionId string) (*LocalParty, error) {
+	party, ok := SignParties[sessionId]
+	if !ok {
+		err := fmt.Errorf("party not found: %s", sessionId)
+		common.Logger.Errorf("%s", err.Error())
+		return nil, err
+	}
+	return party, nil
+}
+
+func RemoveSignParty(sessionId string) bool {
+	if _, ok := SignParties[sessionId]; !ok {
 		return false
 	}
-	delete(SignParties, key)
+	delete(SignParties, sessionId)
 	return true
 }
 
