@@ -8,20 +8,15 @@ import (
 	"math/big"
 	"strings"
 
+	"github.com/ipfs/go-log"
+
 	"tss-sdk/tss/common"
 	"tss-sdk/tss/crypto"
 	"tss-sdk/tss/protocols/cggmp/auxiliary"
 	"tss-sdk/tss/protocols/cggmp/keygen"
 	"tss-sdk/tss/protocols/utils"
 	"tss-sdk/tss/tss"
-
-	"github.com/ipfs/go-log"
 )
-
-// Implements Party
-// Implements Stringer
-// var _ tss.Party = (*LocalParty)(nil)
-// var _ fmt.Stringer = (*LocalParty)(nil)
 
 type (
 	LocalParty struct {
@@ -34,6 +29,10 @@ type (
 		data   *common.SignatureData
 		number int
 		ok     []bool
+
+		sessionId          string
+		sessionKind        string
+		deviceToPartyIndex map[string]int
 	}
 
 	localMessageStore struct {
@@ -86,14 +85,15 @@ type (
 	}
 )
 
-var SignParties = map[string]*LocalParty{}
+var Parties = map[string]*LocalParty{}
 
 func NewLocalParty(
 	isThreshold bool,
-	key string,
-	partyIndex int,
-	partyCount int,
-	pIDs []string,
+	sessionId string,
+	sessionKind string,
+	deviceId string,
+	allDevices []string,
+	connIds []uint64,
 	msg string, // hex string
 	keyData string, // keygen.LocalPartySaveData, base64 string
 	auxData string, // auxiliary.LocalPartySaveData, base64 string
@@ -114,15 +114,14 @@ func NewLocalParty(
 		return
 	}
 
-	uIds := make(tss.UnSortedPartyIDs, 0, partyCount)
-	for i := 0; i < partyCount; i++ {
-		pId, _ := new(big.Int).SetString(pIDs[i], 10)
-		common.Logger.Infof("id: %d", pId)
-		uIds = append(uIds, tss.NewPartyID(fmt.Sprintf("%d", i), fmt.Sprintf("m_%d", i), pId))
-	}
-	ids := tss.SortPartyIDs(uIds)
-	p2pCtx := tss.NewPeerContext(ids)
-	params := tss.NewParameters(tss.S256(), p2pCtx, ids[partyIndex], partyCount, partyCount)
+	partyCount := len(allDevices)
+	partyIndexs, pIds := utils.SortPartys(deviceId, allDevices, connIds)
+	p2pCtx := tss.NewPeerContext(pIds)
+
+	partyIndex := partyIndexs[deviceId]
+	common.Logger.Infof("party index: %d", partyIndex)
+
+	params := tss.NewParameters(tss.S256(), p2pCtx, pIds[partyIndex], partyCount, partyCount)
 
 	keyDataBytes, err := base64.StdEncoding.DecodeString(keyData)
 	if err != nil {
@@ -177,14 +176,18 @@ func NewLocalParty(
 	}
 
 	p := &LocalParty{
-		BaseParty: new(tss.BaseParty),
-		params:    params,
-		key:       keyParty,
-		aux:       auxParty,
-		temp:      localTempData{},
-		data:      &common.SignatureData{},
-		ok:        make([]bool, partyCount),
+		BaseParty:          new(tss.BaseParty),
+		params:             params,
+		key:                keyParty,
+		aux:                auxParty,
+		temp:               localTempData{},
+		data:               &common.SignatureData{},
+		ok:                 make([]bool, partyCount),
+		sessionId:          sessionId,
+		sessionKind:        sessionKind,
+		deviceToPartyIndex: partyIndexs,
 	}
+
 	// msgs init
 	p.temp.signRound1Message1s = make([]tss.ParsedMessage, partyCount)
 	p.temp.signRound1Message2s = make([]tss.ParsedMessage, partyCount)
@@ -203,16 +206,26 @@ func NewLocalParty(
 	p.temp.beta = make([]*big.Int, partyCount)
 	p.temp.betaHat = make([]*big.Int, partyCount)
 
-	SignParties[key] = p
+	Parties[sessionId] = p
 	result.Ok = true
 	return
 }
 
-func RemoveSignParty(key string) bool {
-	if _, ok := SignParties[key]; !ok {
+func GetParty(sessionId string) (*LocalParty, error) {
+	party, ok := Parties[sessionId]
+	if !ok {
+		err := fmt.Errorf("party not found: %s", sessionId)
+		common.Logger.Errorf("%s", err.Error())
+		return nil, err
+	}
+	return party, nil
+}
+
+func RemoveSignParty(sessionId string) bool {
+	if _, ok := Parties[sessionId]; !ok {
 		return false
 	}
-	delete(SignParties, key)
+	delete(Parties, sessionId)
 	return true
 }
 

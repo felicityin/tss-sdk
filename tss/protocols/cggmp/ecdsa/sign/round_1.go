@@ -1,7 +1,6 @@
 package sign
 
 import (
-	"encoding/base64"
 	"fmt"
 	"math/big"
 
@@ -14,11 +13,10 @@ import (
 
 var ProofParameter = crypto.NewProofConfig(tss.S256().Params().N)
 
-func OnSignRound1Exec(key string) (result utils.TssExecResult) {
-	round, ok := SignParties[key]
-	if !ok {
-		common.Logger.Errorf("party not found: %s", key)
-		result.Err = fmt.Sprintf("party not found: %s", key)
+func OnSignRound1Exec(sessionId string) (result utils.TssExecResult) {
+	round, err := GetParty(sessionId)
+	if err != nil {
+		result.Err = err.Error()
 		return
 	}
 
@@ -30,7 +28,6 @@ func OnSignRound1Exec(key string) (result utils.TssExecResult) {
 	common.Logger.Infof("[sign] party: %d, round_1 start", i)
 
 	round.temp.ssidNonce = new(big.Int).SetUint64(0)
-	var err error
 	round.temp.ssid, err = round.getSSID()
 	if err != nil {
 		return
@@ -92,61 +89,53 @@ func OnSignRound1Exec(key string) (result utils.TssExecResult) {
 		if err != nil {
 			round.WrapError(err, Pj)
 		}
-		msgWireBytes, _, err := r1msg2.WireBytes()
+		msgWireBytes, router, err := r1msg2.WireBytes()
 		if err != nil {
-			common.Logger.Errorf("get r1msg2 wire bytes error: %s", key)
-			result.Err = fmt.Sprintf("get r1msg2 wire bytes error: %s", key)
+			common.Logger.Errorf("get r1msg2 wire bytes error: %s", sessionId)
+			result.Err = fmt.Sprintf("get r1msg2 wire bytes error: %s", sessionId)
 			return
 		}
-		round.temp.send.signRound1Message2s[j] = msgWireBytes
+		round.temp.send.signRound1Message2s[j] = utils.MpcP2pMsg(round.sessionId, round.sessionKind, Pj.Id, router, msgWireBytes)
 		if j == i {
 			round.temp.signRound1Message2s[i] = r1msg2
 		}
 	}
 
-	msgWireBytes, _, err := r1msg1.WireBytes()
+	msgWireBytes, router, err := r1msg1.WireBytes()
 	if err != nil {
-		common.Logger.Errorf("get r1msg1 wire bytes error: %s", key)
-		result.Err = fmt.Sprintf("get r1msg1 wire bytes error: %s", key)
+		err := fmt.Sprintf("get r1msg1 wire bytes error: %s", sessionId)
+		common.Logger.Error(err)
+		result.Err = err
 		return
 	}
 
 	result.Ok = true
-	result.MsgWireBytes = msgWireBytes
+	result.Msg = utils.MpcBroadcastMsg(round.sessionId, round.sessionKind, router, msgWireBytes)
 	return result
 }
 
-func GetRound1Msg2(key string, to int) (result utils.TssExecResult) {
-	party, ok := SignParties[key]
-	if !ok {
-		common.Logger.Errorf("party not found: %s", key)
-		result.Err = fmt.Sprintf("party not found: %s", key)
+func GetRound1Msg2(sessionId string, to int) (result utils.TssExecResult) {
+	party, err := GetParty(sessionId)
+	if err != nil {
+		result.Err = err.Error()
 		return
 	}
 	result.Ok = true
-	result.MsgWireBytes = party.temp.send.signRound1Message2s[to]
+	result.Msg = party.temp.send.signRound1Message2s[to]
 	return
 }
 
-func OnSignRound1MsgAccept(key string, from int, msgWireBytes string) (result utils.TssResult) {
-	party, ok := SignParties[key]
-	if !ok {
-		common.Logger.Errorf("party not found: %s", key)
-		result.Err = fmt.Sprintf("party not found: %s", key)
+func OnSignRound1MsgAccept(sessionId string, recv []byte) (result utils.TssResult) {
+	party, err := GetParty(sessionId)
+	if err != nil {
+		result.Err = err.Error()
 		return
 	}
 
-	rMsgBytes, err := base64.StdEncoding.DecodeString(msgWireBytes)
+	msg, from, err := utils.ParseMpcMsg(recv, sessionId)
 	if err != nil {
-		common.Logger.Errorf("msg error, r1msg1 base64 decode fail, err:%s", err.Error())
-		result.Err = fmt.Sprintf("msg error, r1msg1 base64 decode fail, err:%s", err.Error())
-		return
-	}
-
-	msg, err := tss.ParseWireMsg(rMsgBytes)
-	if err != nil {
-		common.Logger.Errorf("msg error, parse wire r1msg1 fail, err:%s", err.Error())
-		result.Err = fmt.Sprintf("msg error, parse wire r1msg1 fail, err:%s", err.Error())
+		common.Logger.Errorf("parse recv r1msg err: %s", err.Error())
+		result.Err = err.Error()
 		return
 	}
 
@@ -162,11 +151,10 @@ func OnSignRound1MsgAccept(key string, from int, msgWireBytes string) (result ut
 	return
 }
 
-func OnSignRound1Finish(key string) (result utils.TssResult) {
-	party, ok := SignParties[key]
-	if !ok {
-		common.Logger.Errorf("party not found: %s", key)
-		result.Err = fmt.Sprintf("party not found: %s", key)
+func OnSignRound1Finish(sessionId string) (result utils.TssResult) {
+	party, err := GetParty(sessionId)
+	if err != nil {
+		result.Err = err.Error()
 		return
 	}
 

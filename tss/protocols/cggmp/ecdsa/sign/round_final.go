@@ -10,11 +10,11 @@ import (
 	"tss-sdk/tss/protocols/utils"
 )
 
-func OnsignRound5Exec(key string) (result utils.TssExecResult) {
-	round, ok := SignParties[key]
+func OnsignRound5Exec(sessionId string) (result utils.TssExecResult) {
+	round, ok := Parties[sessionId]
 	if !ok {
-		common.Logger.Errorf("party not found: %s", key)
-		result.Err = fmt.Sprintf("party not found: %s", key)
+		common.Logger.Errorf("party not found: %s", sessionId)
+		result.Err = fmt.Sprintf("party not found: %s", sessionId)
 		return
 	}
 
@@ -92,7 +92,7 @@ func OnsignRound5Exec(key string) (result utils.TssExecResult) {
 	}
 
 	result.Ok = true
-	result.MsgWireBytes = saveBytes
+	result.Msg = saveBytes
 	return result
 }
 

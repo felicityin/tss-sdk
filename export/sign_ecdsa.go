@@ -1,23 +1,27 @@
 package tssdk
 
 import (
-	"strings"
-
 	onsign "tss-sdk/tss/protocols/cggmp/ecdsa/sign"
 )
 
 func NewEcdsaSignLocalParty(
-	key string,
-	partyIndex int,
-	partyCount int,
-	pIDs string,
+	isThreshold bool,
+	sessionId string,
+	sessionKind string,
+	deviceId string,
+	allDevices string, // comma separated
+	connIds string, // comma separated
 	msg string, // hex string
 	keyData string, // keygen.LocalPartySaveData, base64 string
 	auxData string, // auxiliary.LocalPartySaveData, base64 string
 	walletPath string,
 ) *MpcResult {
-	ids := strings.Split(pIDs, ",")
-	res := onsign.NewLocalParty(false, key, partyIndex, partyCount, ids, msg, keyData, auxData, walletPath)
+	parties, connectIds, err := parseParties(allDevices, connIds)
+	if err != nil {
+		return &MpcResult{Ok: false, Err: err.Error()}
+	}
+
+	res := onsign.NewLocalParty(isThreshold, sessionId, sessionKind, deviceId, parties, connectIds, msg, keyData, auxData, walletPath)
 	return toMpcRes(res)
 }
 
@@ -35,8 +39,8 @@ func GetSignRound1Msg2(key string, to int) *MpcExecResult {
 	return toMpcExecRes(res)
 }
 
-func EcdsaSignRound1MsgAccept(key string, from int, msgWireBytes string) *MpcResult {
-	res := onsign.OnSignRound1MsgAccept(key, from, msgWireBytes)
+func EcdsaSignRound1MsgAccept(key string, recv []byte) *MpcResult {
+	res := onsign.OnSignRound1MsgAccept(key, recv)
 	return toMpcRes(res)
 }
 
@@ -55,8 +59,8 @@ func GetSignRound2Msg(key string, to int) *MpcExecResult {
 	return toMpcExecRes(res)
 }
 
-func EcdsaSignRound2MsgAccept(key string, from int, msgWireBytes string) *MpcResult {
-	res := onsign.OnSignRound2MsgAccept(key, from, msgWireBytes)
+func EcdsaSignRound2MsgAccept(key string, recv []byte) *MpcResult {
+	res := onsign.OnSignRound2MsgAccept(key, recv)
 	return toMpcRes(res)
 }
 
@@ -75,8 +79,8 @@ func GetSignRound3Msg(key string, to int) *MpcExecResult {
 	return toMpcExecRes(res)
 }
 
-func EcdsaSignRound3MsgAccept(key string, from int, msgWireBytes string) *MpcResult {
-	res := onsign.OnSignRound3MsgAccept(key, from, msgWireBytes)
+func EcdsaSignRound3MsgAccept(key string, recv []byte) *MpcResult {
+	res := onsign.OnSignRound3MsgAccept(key, recv)
 	return toMpcRes(res)
 }
 
@@ -90,8 +94,8 @@ func EcdsaSignRound4Exec(key string) *MpcExecResult {
 	return toMpcExecRes(res)
 }
 
-func EcdsaSignRound4MsgAccept(key string, from int, msgWireBytes string) *MpcResult {
-	res := onsign.OnSignRound4MsgAccept(key, from, msgWireBytes)
+func EcdsaSignRound4MsgAccept(key string, recv []byte) *MpcResult {
+	res := onsign.OnSignRound4MsgAccept(key, recv)
 	return toMpcRes(res)
 }
 
