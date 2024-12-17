@@ -86,9 +86,9 @@ func GetRound2Msg2(sessionId string, toDeviceId string) (result utils.TssExecRes
 		return
 	}
 
-	to, exists := party.deviceToPartyIndex[toDeviceId]
+	to, exists := party.DeviceToPartyIndex[toDeviceId]
 	if !exists {
-		result.Err = fmt.Sprintf("device id %s is not in group %+v", toDeviceId, party.deviceToPartyIndex)
+		result.Err = fmt.Sprintf("device id %s is not in group %+v", toDeviceId, party.DeviceToPartyIndex)
 		return
 	}
 

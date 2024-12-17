@@ -9,11 +9,11 @@ import (
 	"sort"
 	"strconv"
 
+	"google.golang.org/protobuf/proto"
+
 	"tss-sdk/msgs"
 	"tss-sdk/tss/common"
 	"tss-sdk/tss/tss"
-
-	"google.golang.org/protobuf/proto"
 )
 
 type TssExecResult struct {

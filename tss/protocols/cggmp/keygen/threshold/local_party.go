@@ -28,7 +28,8 @@ type (
 
 		sessionId          string
 		sessionKind        string
-		deviceToPartyIndex map[string]int
+		DeviceToPartyIndex map[string]int
+		deviceId           string
 	}
 
 	localMessageStore struct {
@@ -74,6 +75,7 @@ var Parties = map[string]*LocalParty{}
 // Exported, used in `tss` client
 func NewLocalParty(
 	algo string, // ecdsa or eddsa
+	threshold int, // threshold <= n
 	sessionId string,
 	sessionKind string,
 	deviceId string,
@@ -107,9 +109,9 @@ func NewLocalParty(
 
 	var params *tss.Parameters
 	if algo == "ecdsa" {
-		params = tss.NewParameters(tss.S256(), p2pCtx, pIds[partyIndex], partyCount, partyCount)
+		params = tss.NewParameters(tss.S256(), p2pCtx, pIds[partyIndex], partyCount, threshold-1)
 	} else if algo == "eddsa" {
-		params = tss.NewParameters(tss.Edwards(), p2pCtx, pIds[partyIndex], partyCount, partyCount)
+		params = tss.NewParameters(tss.Edwards(), p2pCtx, pIds[partyIndex], partyCount, threshold-1)
 	} else {
 		common.Logger.Errorf("unknown algo: %s", algo)
 		result.Err = fmt.Sprintf("unknown algo: %s", algo)
@@ -125,7 +127,7 @@ func NewLocalParty(
 		ok:                 make([]bool, partyCount),
 		sessionId:          sessionId,
 		sessionKind:        sessionKind,
-		deviceToPartyIndex: partyIndexs,
+		DeviceToPartyIndex: partyIndexs,
 	}
 
 	// msgs init
@@ -143,6 +145,20 @@ func NewLocalParty(
 	Parties[sessionId] = p
 	result.Ok = true
 	return
+}
+
+func PartyIndex(sessionId, deviceId string) int {
+	party, ok := Parties[sessionId]
+	if !ok {
+		common.Logger.Errorf("party not found: %s", sessionId)
+		return -1
+	}
+	index, ok := party.DeviceToPartyIndex[deviceId]
+	if !ok {
+		common.Logger.Errorf("device not found: %s", deviceId)
+		return -1
+	}
+	return index
 }
 
 func GetParty(sessionId string) (*LocalParty, error) {
@@ -187,5 +203,5 @@ func (p *LocalParty) SetChainCode(x *big.Int) {
 
 // get ssid from local params
 func (p *LocalParty) getSSID() ([]byte, error) {
-	return []byte("threshold-keygen"), nil
+	return []byte("keygen"), nil
 }
