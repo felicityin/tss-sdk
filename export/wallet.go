@@ -3,10 +3,7 @@ package tssdk
 import (
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"math/big"
-
-	"github.com/ethereum/go-ethereum/crypto"
 
 	"tss-sdk/hwallet/bip39"
 	"tss-sdk/hwallet/blocktree/go-owcdrivers/owkeychain"
@@ -14,6 +11,8 @@ import (
 	"tss-sdk/hwallet/hdwallet"
 	"tss-sdk/tss/tss"
 )
+
+const CipherSafe = "CipherSafe"
 
 type WalletResult struct {
 	Result    string `json:"result"`
@@ -35,14 +34,38 @@ func GenerateMnemonic(length int) string {
 	return mn
 }
 
+func MnemonicToSeed(mnemonic string) *WalletResult {
+	seed, err := hdwallet.NewSeed(mnemonic, CipherSafe, hdwallet.English)
+	if err != nil {
+		return &WalletResult{Success: false, ErrMsg: err.Error()}
+	}
+	return &WalletResult{Success: true, Result: hex.EncodeToString(seed)}
+}
+
 // pinCode: is a 6-digit number. eg. 124561
 func GenHardWalletPriv(mnemonic string, pinCode string) *WalletResult {
-	seed, err := hdwallet.NewSeed(mnemonic, pinCode, hdwallet.English)
+	seed, err := hdwallet.NewSeed(mnemonic, CipherSafe, hdwallet.English)
 	if err != nil {
 		return &WalletResult{Success: false, ErrMsg: err.Error()}
 	}
 
-	masterPriv, chainCode := hdwallet.ComputeMastersFromSeed(seed)
+	masterPriv, chainCode := hdwallet.ComputeMasterFromSeed(seed, pinCode)
+
+	return &WalletResult{
+		Success:   true,
+		ChainCode: hex.EncodeToString(chainCode[:]),
+		Result:    hex.EncodeToString(masterPriv[:]),
+	}
+}
+
+// pinCode: is a 6-digit number. eg. 124561
+func GenHardWalletPrivBySeed(seed string, pinCode string) *WalletResult {
+	decodedSeed, err := hex.DecodeString(seed)
+	if err != nil {
+		return &WalletResult{Success: false, ErrMsg: err.Error()}
+	}
+
+	masterPriv, chainCode := hdwallet.ComputeMasterFromSeed(decodedSeed, pinCode)
 
 	return &WalletResult{
 		Success:   true,
@@ -55,11 +78,11 @@ func GenHardWalletFingerPrint(mnemonic, pinCode string) *WalletResult {
 	status := bip39.IsMnemonicValid(mnemonic)
 	result := &WalletResult{Success: status}
 	if status {
-		seed, err := hdwallet.NewSeed(mnemonic, pinCode, hdwallet.English)
+		seed, err := hdwallet.NewSeed(mnemonic, CipherSafe, hdwallet.English)
 		if err != nil {
 			return &WalletResult{Success: false, ErrMsg: err.Error()}
 		}
-		masterPriv, _ := hdwallet.ComputeMastersFromSeed(seed)
+		masterPriv, _ := hdwallet.ComputeMasterFromSeed(seed, pinCode)
 		finger := owkeychain.GetFingerPrint(masterPriv[:], true, owcrypt.ECC_CURVE_SECP256K1)
 		result.Result = hex.EncodeToString(finger)
 	} else {
@@ -68,11 +91,22 @@ func GenHardWalletFingerPrint(mnemonic, pinCode string) *WalletResult {
 	return result
 }
 
-func GetFingerPrint(mnemonic string) *WalletResult {
+func GenHardWalletFingerPrintBySeed(seed, pinCode string) *WalletResult {
+	decodedSeed, err := hex.DecodeString(seed)
+	if err != nil {
+		return &WalletResult{Success: false, ErrMsg: err.Error()}
+	}
+
+	masterPriv, _ := hdwallet.ComputeMasterFromSeed(decodedSeed, pinCode)
+	finger := owkeychain.GetFingerPrint(masterPriv[:], true, owcrypt.ECC_CURVE_SECP256K1)
+	return &WalletResult{Success: true, Result: hex.EncodeToString(finger)}
+}
+
+func GenFingerPrint(mnemonic string) *WalletResult {
 	status := bip39.IsMnemonicValid(mnemonic)
 	result := &WalletResult{Success: status}
 	if status {
-		seed, err := hdwallet.NewSeed(mnemonic, "", hdwallet.English)
+		seed, err := hdwallet.NewSeed(mnemonic, CipherSafe, hdwallet.English)
 		if err != nil {
 			return &WalletResult{Success: false, ErrMsg: err.Error()}
 		}
@@ -87,67 +121,6 @@ func GetFingerPrint(mnemonic string) *WalletResult {
 
 func VaildMnemonic(mnemonic string) bool {
 	return bip39.IsMnemonicValid(mnemonic)
-}
-
-// 检验是否是相关币种地址
-func CheckAddress(address, coin string) bool {
-	return hdwallet.CheckCoinAddress(address, coin)
-}
-
-func GetChainType(chain string) int {
-	return hdwallet.GetChainType(chain)
-}
-
-func GenerateAddress(pubkeyHex, coin string) string {
-	return hdwallet.GenerateAddress(pubkeyHex, coin)
-}
-
-// 根据助词和路径生成钱包
-func GeneratePathWallet(mn, path string) *WalletResult {
-	seed, err := hdwallet.NewSeed(mn, "", hdwallet.English)
-	if err != nil {
-		return &WalletResult{Success: false, ErrMsg: err.Error()}
-	}
-	masterPriv, ch := hdwallet.ComputeMastersFromSeed(seed)
-
-	derivedPriv, ch, err := hdwallet.DerivePrivateKeyForPath(masterPriv, ch, path)
-	if err != nil {
-		return &WalletResult{Success: false, ErrMsg: err.Error()}
-	}
-
-	return &WalletResult{
-		Success:   true,
-		ChainCode: hex.EncodeToString(ch[:]),
-		Result:    hex.EncodeToString(derivedPriv[:]),
-	}
-}
-
-func GenerateHardWallet(mnemonic, pinCode, path string) *WalletResult {
-	seed, err := hdwallet.NewSeed(mnemonic, pinCode, hdwallet.English)
-	if err != nil {
-		return &WalletResult{Success: false, ErrMsg: err.Error()}
-	}
-
-	masterPriv, ch := hdwallet.ComputeMastersFromSeed(seed)
-
-	derivedPriv, ch, err := hdwallet.DerivePrivateKeyForPath(masterPriv, ch, path)
-	if err != nil {
-		return &WalletResult{Success: false, ErrMsg: err.Error()}
-	}
-
-	return &WalletResult{
-		Success:   true,
-		ChainCode: hex.EncodeToString(ch[:]),
-		Result:    hex.EncodeToString(derivedPriv[:]),
-	}
-}
-
-func GetSignatureHash(data string) string {
-	content, _ := hex.DecodeString(data)
-	msg := fmt.Sprintf("\x19Ethereum Signed Message:\n%d", len(content))
-	message := append([]byte(msg), content...)
-	return crypto.Keccak256Hash(message).Hex()
-
 }
 
 func GetSignature(rx, ry, s string) string {

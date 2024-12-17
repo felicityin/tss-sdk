@@ -104,7 +104,7 @@ func EcdsaSignRound4Finish(sessionId string) *MpcResult {
 	return toMpcRes(res)
 }
 
-func EcdsaSignFinalExec(sessionId string) *MpcResult {
-	res := onsign.OnsignRound3Exec(sessionId)
-	return toMpcRes(res)
+func EcdsaSignFinalExec(sessionId string) *MpcExecResult {
+	res := onsign.OnsignRound5Exec(sessionId)
+	return toMpcExecRes(res)
 }
