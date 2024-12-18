@@ -1,18 +1,15 @@
-package keygen
+package auxiliary
 
 import (
 	"errors"
 	"fmt"
-	"math/big"
 
 	tssdk "tss-sdk/export"
 	"tss-sdk/test/tss"
 	"tss-sdk/tss/common"
 )
 
-var zero = big.NewInt(0)
-
-// round 1 represents round 1 of the keygen part of the TSS spec
+// round 1 represents round 1 of the keygen part of the EDDSA TSS spec
 func newRound1(
 	n int,
 	index int,
@@ -35,21 +32,21 @@ func (round *round1) Start() error {
 	round.started = true
 	round.resetOK()
 
-	msg := tssdk.TKeygenRound1Exec(round.sessionId)
+	msg := tssdk.AuxRound1Exec(round.sessionId)
 	if !msg.Ok {
-		common.Logger.Errorf("TKeygenRound1Exec err: %s", msg.Err)
-		return fmt.Errorf("TKeygenRound1Exec err: %s", msg.Err)
+		common.Logger.Errorf("AuxRound1Exec err: %s", msg.Err)
+		return fmt.Errorf("AuxRound1Exec err: %s", msg.Err)
 	}
 
-	common.Logger.Infof("party: %d, %s, round_1 broadcast", round.index, round.deviceId)
+	common.Logger.Infof("[%s] party: %d, %s, round_1 broadcast", round.sessionId, round.index, round.deviceId)
 	round.out <- msg.Msg
 	return nil
 }
 
 func (round *round1) Update() (bool, error) {
-	res := tssdk.TKeygenRound1Finish(round.sessionId)
+	res := tssdk.AuxRound1Finish(round.sessionId)
 	if !res.Ok {
-		common.Logger.Errorf("TKeygenRound1Finish err: %s, %s", res.Err, round.sessionId)
+		common.Logger.Errorf("AuxRound1Finish err: %s, %s", res.Err, round.sessionId)
 		return false, nil // err must be nil, import!!!
 	}
 	for i := 0; i < round.n; i++ {

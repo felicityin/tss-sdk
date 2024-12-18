@@ -1,6 +1,7 @@
-package keygen
+package auxiliary
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"runtime"
@@ -22,34 +23,17 @@ func setUp(level string) {
 	}
 }
 
-func TestEcdsaE2EConcurrentAndSaveFixtures(t *testing.T) {
-	testE2EConcurrentAndSaveFixtures(t, Ecdsa)
-}
-
-func TestEddsaE2EConcurrentAndSaveFixtures(t *testing.T) {
-	testE2EConcurrentAndSaveFixtures(t, Eddsa)
-}
-
-func testE2EConcurrentAndSaveFixtures(t *testing.T, kind int) {
+func TestE2EConcurrentAndSaveFixtures(t *testing.T) {
 	setUp("debug")
 
 	const (
-		sessionId   = "kg"
-		deviceId    = "test-device"
-		rootPrivKey = "3acd00a8164031b61c7c6a578137b83d5c0b57d6dbd8617ece480ec9078442c7"
-		chainCode   = "4acd00a8164031b61c7c6a578137b83d5c0b57d6dbd8617ece480ec9078442c7"
+		sessionId = "aux"
+		deviceId  = "test-device"
 	)
 	var (
 		allDevices []string
 		connIds    []string
 	)
-
-	sessionKind := msgs.SessionKindEcdsaKeygen
-	algo := "ecdsa"
-	if kind == Eddsa {
-		algo = "eddsa"
-		sessionKind = msgs.SessionKindEddsaKeygen
-	}
 
 	n := TestParticipants
 
@@ -72,15 +56,11 @@ func testE2EConcurrentAndSaveFixtures(t *testing.T, kind int) {
 	// init the parties
 	for i := 0; i < n; i++ {
 		party := NewLocalParty(
-			algo,
-			TestThreshold,
 			fmt.Sprintf("%s-%s", sessionId, allDevices[i]),
-			sessionKind,
+			msgs.SessionKindEcdsaAux,
 			allDevices[i],
 			strings.Join(allDevices, ","),
 			strings.Join(connIds, ","),
-			rootPrivKey,
-			chainCode,
 			outCh,
 			endCh,
 		).(*LocalParty)
@@ -93,16 +73,15 @@ func testE2EConcurrentAndSaveFixtures(t *testing.T, kind int) {
 		}(party)
 	}
 
-	// PHASE: keygen
 	var ended int32
-keygen:
+AUX:
 	for {
 		common.Logger.Debugf("ACTIVE GOROUTINES: %d\n", runtime.NumGoroutine())
 		select {
 		case err := <-errCh:
 			common.Logger.Errorf("Error: %s", err)
 			assert.FailNow(t, err.Error())
-			break keygen
+			break AUX
 
 		case msg := <-outCh:
 			for _, P := range parties {
@@ -112,22 +91,20 @@ keygen:
 		case save := <-endCh:
 			common.Logger.Debugf("reveive save data")
 
-			tryWriteTestFixtureFile(t, kind, save.PartyIndex, save.Data)
+			tryWriteTestFixtureFile(t, save.PartyIndex, save.Data)
 
 			atomic.AddInt32(&ended, 1)
 			if atomic.LoadInt32(&ended) == int32(n) {
 				t.Logf("Done. Received save data from %d participants", ended)
-				t.Log("ECDSA signing test done.")
 				t.Logf("Start goroutines: %d, End goroutines: %d", startGR, runtime.NumGoroutine())
-
-				break keygen
+				break AUX
 			}
 		}
 	}
 }
 
-func tryWriteTestFixtureFile(t *testing.T, kind, index int, data []byte) {
-	fixtureFileName := makeTestFixtureFilePath(kind, index)
+func tryWriteTestFixtureFile(t *testing.T, index int, data []byte) {
+	fixtureFileName := makeTestFixtureFilePath(index)
 
 	// fixture file does not already exist?
 	// if it does, we won't re-create it here
@@ -137,7 +114,11 @@ func tryWriteTestFixtureFile(t *testing.T, kind, index int, data []byte) {
 		if err != nil {
 			assert.NoErrorf(t, err, "unable to open fixture file %s for writing", fixtureFileName)
 		}
-		_, err = fd.Write(data)
+		bz, err := json.Marshal(&data)
+		if err != nil {
+			t.Fatalf("unable to marshal save data for fixture file %s", fixtureFileName)
+		}
+		_, err = fd.Write(bz)
 		if err != nil {
 			t.Fatalf("unable to write to fixture file %s", fixtureFileName)
 		}

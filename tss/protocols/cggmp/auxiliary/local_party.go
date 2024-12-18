@@ -64,7 +64,6 @@ var Parties = map[string]*LocalParty{}
 // Exported, used in `tss` client
 func NewLocalParty(
 	sessionId string,
-	sessionKind string,
 	deviceId string,
 	allDevices []string,
 	connIds []uint64,
@@ -91,7 +90,6 @@ func NewLocalParty(
 		save:               NewLocalPartySaveData(partyCount),
 		ok:                 make([]bool, partyCount),
 		sessionId:          sessionId,
-		sessionKind:        sessionKind,
 		deviceToPartyIndex: partyIndexs,
 		index:              partyIndex,
 	}

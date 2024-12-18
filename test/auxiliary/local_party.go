@@ -1,4 +1,4 @@
-package keygen
+package auxiliary
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 	tssdk "tss-sdk/export"
 	"tss-sdk/test/tss"
 	"tss-sdk/tss/common"
-	keygen "tss-sdk/tss/protocols/cggmp/keygen/threshold"
+	"tss-sdk/tss/protocols/cggmp/auxiliary"
 	"tss-sdk/tss/protocols/utils"
 )
 
@@ -16,43 +16,39 @@ import (
 var _ tss.Party = (*LocalParty)(nil)
 var _ fmt.Stringer = (*LocalParty)(nil)
 
+type SaveData struct {
+	PartyIndex int
+	Data       []byte
+}
+
 type (
 	LocalParty struct {
 		*tss.BaseParty
-
-		// outbound messaging
-		out chan<- []byte
-		end chan<- *SaveData
 
 		n          int
 		partyIndex int
 		sessionId  string
 		deviceId   string
 		devices    []string
+
+		// outbound messaging
+		out chan<- []byte
+		end chan<- *SaveData
 	}
 )
 
-type SaveData struct {
-	PartyIndex int
-	Data       []byte
-}
-
 // Exported, used in `tss` client
 func NewLocalParty(
-	algo string, // ecdsa or eddsa
-	threshold int, // threshold <= n
 	sessionId string,
 	sessionKind string,
 	deviceId string,
 	allDevices string, // comma separated
 	connIds string, // comma separated
-	rootPrivKey string, // hex string
-	chainCode string, // hex string
 	out chan<- []byte,
 	end chan<- *SaveData,
 ) tss.Party {
-	party := tssdk.NewTKeygenLocalParty(
-		algo, threshold, sessionId, sessionKind, deviceId, allDevices, connIds, rootPrivKey, chainCode,
+	party := tssdk.NewAuxLocalParty(
+		sessionId, sessionKind, deviceId, allDevices, connIds,
 	)
 	if !party.Ok {
 		common.Logger.Error(party.Err)
@@ -97,28 +93,22 @@ func (p *LocalParty) StoreMessage(recv []byte) (bool, error) {
 	// switch/case is necessary to store any messages beyond current round
 	// this does not handle message replays. we expect the caller to apply replay and spoofing protection.
 	switch msg.Content().(type) {
-	case *keygen.TKgRound1Message:
-		res := tssdk.TKeygenRound1Accept(p.sessionId, recv)
+	case *auxiliary.AuxRound1Message:
+		res := tssdk.AuxRound1Accept(p.sessionId, recv)
 		if !res.Ok {
 			common.Logger.Errorf("TKeygenRound1Accept err: %s", res.Err)
 			return false, fmt.Errorf("%s", res.Err)
 		}
-	case *keygen.TKgRound2Message1:
-		res := tssdk.TKeygenRound2Accept(p.sessionId, recv)
+	case *auxiliary.AuxRound2Message:
+		res := tssdk.AuxRound2Accept(p.sessionId, recv)
 		if !res.Ok {
 			common.Logger.Errorf("TKeygenRound2Accept1 err: %s", res.Err)
 			return false, fmt.Errorf("%s", res.Err)
 		}
-	case *keygen.TKgRound2Message2:
-		res := tssdk.TKeygenRound2Accept(p.sessionId, recv)
+	case *auxiliary.AuxRound3Message:
+		res := tssdk.AuxRound3Accept(p.sessionId, recv)
 		if !res.Ok {
 			common.Logger.Errorf("TKeygenRound2Accept2 err: %s", res.Err)
-			return false, fmt.Errorf("%s", res.Err)
-		}
-	case *keygen.TKgRound3Message:
-		res := tssdk.TKeygenRound3Accept(p.sessionId, recv)
-		if !res.Ok {
-			common.Logger.Errorf("TKeygenRound3Accept err: %s", res.Err)
 			return false, fmt.Errorf("%s", res.Err)
 		}
 	default: // unrecognised message, just ignore!

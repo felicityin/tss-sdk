@@ -13,6 +13,7 @@ func NewTKeygenLocalParty(
 	algo string, // ecdsa or eddsa
 	threshold int, // threshold <= n
 	sessionId string,
+	sessionKind string,
 	deviceId string,
 	allDevices string, // comma separated
 	connIds string, // comma separated
@@ -24,7 +25,7 @@ func NewTKeygenLocalParty(
 		return &MpcResult{Ok: false, Err: err.Error()}
 	}
 	res := keygen.NewLocalParty(
-		algo, threshold, sessionId, deviceId, parties, connectIds, rootPrivKey, chainCode,
+		algo, threshold, sessionId, sessionKind, deviceId, parties, connectIds, rootPrivKey, chainCode,
 	)
 	return toMpcRes(res)
 }

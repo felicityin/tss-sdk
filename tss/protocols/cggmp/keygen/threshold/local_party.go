@@ -78,6 +78,7 @@ func NewLocalParty(
 	algo string, // ecdsa or eddsa
 	threshold int, // threshold <= n
 	sessionId string,
+	sessionKind string,
 	deviceId string,
 	allDevices []string,
 	connIds []uint64,

@@ -1,7 +1,7 @@
-package keygen
+package auxiliary
 
 const (
-	TaskName = "threshold-keygen"
+	TaskName = "auxiliary"
 )
 
 type (
@@ -59,9 +59,4 @@ func (round *base) resetOK() {
 	for j := range round.ok {
 		round.ok[j] = false
 	}
-}
-
-// get ssid from local params
-func (round *base) getSSID() ([]byte, error) {
-	return []byte("keygen"), nil
 }

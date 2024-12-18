@@ -20,7 +20,7 @@ func NewAuxLocalParty(
 	if err != nil {
 		return &MpcResult{Ok: false, Err: err.Error()}
 	}
-	res := aux.NewLocalParty(sessionId, sessionKind, deviceId, parties, connectIds)
+	res := aux.NewLocalParty(sessionId, deviceId, parties, connectIds)
 	return toMpcRes(res)
 }
 
