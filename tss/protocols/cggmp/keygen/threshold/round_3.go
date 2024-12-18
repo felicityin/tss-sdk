@@ -224,7 +224,7 @@ func KeygenRound3Accept(sessionId string, recv []byte) (result u.TssResult) {
 		return
 	}
 
-	msg, from, err := u.ParseMpcMsg(recv, sessionId)
+	msg, router, err := u.ParseMpcMsg(recv, sessionId)
 	if err != nil {
 		common.Logger.Errorf("parse recv r2msg err: %s", err.Error())
 		result.Err = err.Error()
@@ -237,7 +237,8 @@ func KeygenRound3Accept(sessionId string, recv []byte) (result u.TssResult) {
 	}
 
 	result.Ok = true
-	party.temp.kgRound3Messages[from] = msg
+	party.temp.kgRound3Messages[router.From.Index] = msg
+	common.Logger.Infof("[%s] KeygenRound3Accept recv msg from  %d", sessionId, router.From.Index)
 	return
 }
 

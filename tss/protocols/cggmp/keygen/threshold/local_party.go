@@ -30,6 +30,7 @@ type (
 		sessionKind        string
 		DeviceToPartyIndex map[string]int
 		deviceId           string
+		index              int
 	}
 
 	localMessageStore struct {
@@ -77,7 +78,6 @@ func NewLocalParty(
 	algo string, // ecdsa or eddsa
 	threshold int, // threshold <= n
 	sessionId string,
-	sessionKind string,
 	deviceId string,
 	allDevices []string,
 	connIds []uint64,
@@ -104,8 +104,12 @@ func NewLocalParty(
 	partyIndexs, pIds := utils.SortPartys(deviceId, allDevices, connIds)
 	p2pCtx := tss.NewPeerContext(pIds)
 
+	for i, p := range pIds {
+		common.Logger.Infof("i: %d, index: %d, id: %s", i, p.Index, p.Id)
+	}
+
 	partyIndex := partyIndexs[deviceId]
-	common.Logger.Infof("party index: %d", partyIndex)
+	common.Logger.Infof("party index: %d, %d, id: %s", partyIndex, pIds[partyIndex].Index, pIds[partyIndex].Id)
 
 	var params *tss.Parameters
 	if algo == "ecdsa" {
@@ -126,8 +130,8 @@ func NewLocalParty(
 		data:               data,
 		ok:                 make([]bool, partyCount),
 		sessionId:          sessionId,
-		sessionKind:        sessionKind,
 		DeviceToPartyIndex: partyIndexs,
+		index:              partyIndex,
 	}
 
 	// msgs init
@@ -145,20 +149,6 @@ func NewLocalParty(
 	Parties[sessionId] = p
 	result.Ok = true
 	return
-}
-
-func PartyIndex(sessionId, deviceId string) int {
-	party, ok := Parties[sessionId]
-	if !ok {
-		common.Logger.Errorf("party not found: %s", sessionId)
-		return -1
-	}
-	index, ok := party.DeviceToPartyIndex[deviceId]
-	if !ok {
-		common.Logger.Errorf("device not found: %s", deviceId)
-		return -1
-	}
-	return index
 }
 
 func GetParty(sessionId string) (*LocalParty, error) {

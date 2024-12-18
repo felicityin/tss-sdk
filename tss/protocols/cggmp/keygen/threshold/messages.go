@@ -29,6 +29,7 @@ func NewKGRound1Message(from *tss.PartyID, hash []byte, polyCommitment cmt.HashC
 	meta := tss.MessageRouting{
 		From:        from,
 		IsBroadcast: true,
+		Round:       "r1msg",
 	}
 	content := &TKgRound1Message{
 		Hash:           hash,
@@ -60,6 +61,7 @@ func NewKGRound2Message1(
 	meta := tss.MessageRouting{
 		From:        from,
 		IsBroadcast: true,
+		Round:       "r2msg1",
 	}
 	com, _ := commitmentA.MarshalJSON()
 	content := &TKgRound2Message1{
@@ -107,6 +109,7 @@ func NewKGRound2Message2(
 		From:        from,
 		To:          []*tss.PartyID{to},
 		IsBroadcast: false,
+		Round:       "r2msg2",
 	}
 	content := &TKgRound2Message2{
 		Share: share.Share.Bytes(),
@@ -132,6 +135,7 @@ func NewKGRound3Message(
 	meta := tss.MessageRouting{
 		From:        from,
 		IsBroadcast: true,
+		Round:       "r3msg",
 	}
 	content := &TKgRound3Message{
 		SchProof: schProof,

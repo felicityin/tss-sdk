@@ -139,7 +139,7 @@ func OnSignRound1MsgAccept(sessionId string, recv []byte) (result utils.TssResul
 		return
 	}
 
-	msg, from, err := utils.ParseMpcMsg(recv, sessionId)
+	msg, router, err := utils.ParseMpcMsg(recv, sessionId)
 	if err != nil {
 		common.Logger.Errorf("parse recv r1msg err: %s", err.Error())
 		result.Err = err.Error()
@@ -147,9 +147,9 @@ func OnSignRound1MsgAccept(sessionId string, recv []byte) (result utils.TssResul
 	}
 
 	if _, ok := msg.Content().(*SignRound1Message1); ok {
-		party.temp.signRound1Message1s[from] = msg
+		party.temp.signRound1Message1s[router.From.Index] = msg
 	} else if _, ok := msg.Content().(*SignRound1Message2); ok {
-		party.temp.signRound1Message2s[from] = msg
+		party.temp.signRound1Message2s[router.From.Index] = msg
 	} else {
 		result.Err = "not SignRound1Message"
 		return

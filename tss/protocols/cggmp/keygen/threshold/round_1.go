@@ -17,6 +17,7 @@ var zero = big.NewInt(0)
 func KeygenRound1Exec(sessionId string) (result utils.TssExecResult) {
 	round, err := GetParty(sessionId)
 	if err != nil {
+		common.Logger.Errorf("KeygenRound1Exec GetParty err: %s, sessionId: %s", err.Error(), sessionId)
 		result.Err = err.Error()
 		return
 	}
@@ -25,7 +26,7 @@ func KeygenRound1Exec(sessionId string) (result utils.TssExecResult) {
 
 	Pi := round.PartyID()
 	i := Pi.Index
-	common.Logger.Infof("party: %d, round_1 start", i)
+	common.Logger.Infof("[%s] party: %d, round_1 start", sessionId, i)
 
 	if round.data.PrivXi == nil {
 		round.data.PrivXi = common.GetRandomPositiveInt(round.params.PartialKeyRand(), round.params.EC().Params().N)
@@ -94,7 +95,7 @@ func KeygenRound1Exec(sessionId string) (result utils.TssExecResult) {
 		round.temp.chainCode,
 	)
 
-	common.Logger.Infof("party: %d, round_1 broadcast", i)
+	common.Logger.Infof("[%s] party: %d, round_1 broadcast", sessionId, i)
 
 	msg := NewKGRound1Message(round.PartyID(), Vi, polyCmt.C)
 	msgWireBytes, router, err := msg.WireBytes()
@@ -120,9 +121,9 @@ func KeygenRound1Accept(sessionId string, recv []byte) (result utils.TssResult) 
 		return
 	}
 
-	msg, from, err := utils.ParseMpcMsg(recv, sessionId)
+	msg, router, err := utils.ParseMpcMsg(recv, sessionId)
 	if err != nil {
-		common.Logger.Errorf("parse recv msg err: %s", err.Error())
+		common.Logger.Errorf("parse recv r1msg err: %s", err.Error())
 		result.Err = err.Error()
 		return
 	}
@@ -133,7 +134,8 @@ func KeygenRound1Accept(sessionId string, recv []byte) (result utils.TssResult) 
 	}
 
 	result.Ok = true
-	party.temp.kgRound1Messages[from] = msg
+	party.temp.kgRound1Messages[router.From.Index] = msg
+	common.Logger.Infof("[%s %s] KeygenRound1Accept recv msg from  %d", router.Round, sessionId, router.From.Index)
 	return
 }
 
@@ -151,7 +153,7 @@ func KeygenRound1Finish(sessionId string) (result utils.TssResult) {
 			continue
 		}
 		if msg == nil {
-			err := fmt.Sprintf("msg is null: %d", j)
+			err := fmt.Sprintf("[%s] msg is null: %d", sessionId, j)
 			common.Logger.Error(err)
 			result.Err = err
 			return

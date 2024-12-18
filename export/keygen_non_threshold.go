@@ -125,8 +125,8 @@ func toMpcRes(res utils.TssResult) *MpcResult {
 	}
 }
 
-func parseParties(partyDevices string, connIds string) ([]string, []uint64, error) {
-	parties := strings.Split(partyDevices, ",")
+func parseParties(allDevices string, connIds string) ([]string, []uint64, error) {
+	parties := strings.Split(allDevices, ",")
 	connectIds := strings.Split(connIds, ",")
 
 	if len(parties) != len(connectIds) {

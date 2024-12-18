@@ -1,0 +1,145 @@
+package keygen
+
+import (
+	"fmt"
+	"os"
+	"runtime"
+	"strings"
+	"sync/atomic"
+	"testing"
+
+	"github.com/ipfs/go-log"
+	"github.com/stretchr/testify/assert"
+
+	"tss-sdk/test"
+	"tss-sdk/tss/common"
+)
+
+func setUp(level string) {
+	if err := log.SetLogLevel("tss-lib", level); err != nil {
+		panic(err)
+	}
+}
+
+func TestEcdsaE2EConcurrentAndSaveFixtures(t *testing.T) {
+	testE2EConcurrentAndSaveFixtures(t, Ecdsa)
+}
+
+func TestEddsaE2EConcurrentAndSaveFixtures(t *testing.T) {
+	testE2EConcurrentAndSaveFixtures(t, Eddsa)
+}
+
+func testE2EConcurrentAndSaveFixtures(t *testing.T, kind int) {
+	setUp("debug")
+
+	const (
+		sessionId   = "kg"
+		deviceId    = "test-device"
+		rootPrivKey = "3acd00a8164031b61c7c6a578137b83d5c0b57d6dbd8617ece480ec9078442c7"
+		chainCode   = "4acd00a8164031b61c7c6a578137b83d5c0b57d6dbd8617ece480ec9078442c7"
+	)
+	var (
+		allDevices []string
+		connIds    []string
+	)
+
+	algo := "ecdsa"
+	if kind == Eddsa {
+		algo = "eddsa"
+	}
+
+	n := TestParticipants
+
+	allDevices = make([]string, n)
+	connIds = make([]string, n)
+
+	for i := 0; i < n; i++ {
+		allDevices[i] = fmt.Sprintf("%s-%d", deviceId, i)
+		connIds[i] = fmt.Sprintf("%d", i)
+	}
+
+	errCh := make(chan error, n)
+	outCh := make(chan []byte, n+n)
+	endCh := make(chan *SaveData, n)
+
+	parties := make([]*LocalParty, n, n)
+	updater := test.SharedPartyUpdater
+	startGR := runtime.NumGoroutine()
+
+	// init the parties
+	for i := 0; i < n; i++ {
+		party := NewLocalParty(
+			algo,
+			TestThreshold,
+			fmt.Sprintf("%s-%s", sessionId, allDevices[i]),
+			allDevices[i],
+			strings.Join(allDevices, ","),
+			strings.Join(connIds, ","),
+			rootPrivKey,
+			chainCode,
+			outCh,
+			endCh,
+		).(*LocalParty)
+		parties[i] = party
+
+		go func(party *LocalParty) {
+			if err := party.Start(); err != nil {
+				errCh <- err
+			}
+		}(party)
+	}
+
+	// PHASE: keygen
+	var ended int32
+keygen:
+	for {
+		common.Logger.Debugf("ACTIVE GOROUTINES: %d\n", runtime.NumGoroutine())
+		select {
+		case err := <-errCh:
+			common.Logger.Errorf("Error: %s", err)
+			assert.FailNow(t, err.Error())
+			break keygen
+
+		case msg := <-outCh:
+			for _, P := range parties {
+				go updater(P, msg, errCh)
+			}
+
+		case save := <-endCh:
+			common.Logger.Debugf("reveive save data")
+
+			tryWriteTestFixtureFile(t, kind, save.PartyIndex, save.Data)
+
+			atomic.AddInt32(&ended, 1)
+			if atomic.LoadInt32(&ended) == int32(n) {
+				t.Logf("Done. Received save data from %d participants", ended)
+				t.Log("ECDSA signing test done.")
+				t.Logf("Start goroutines: %d, End goroutines: %d", startGR, runtime.NumGoroutine())
+
+				break keygen
+			}
+		}
+	}
+}
+
+func tryWriteTestFixtureFile(t *testing.T, kind, index int, data []byte) {
+	fixtureFileName := makeTestFixtureFilePath(kind, index)
+
+	// fixture file does not already exist?
+	// if it does, we won't re-create it here
+	fi, err := os.Stat(fixtureFileName)
+	if !(err == nil && fi != nil && !fi.IsDir()) {
+		fd, err := os.OpenFile(fixtureFileName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+		if err != nil {
+			assert.NoErrorf(t, err, "unable to open fixture file %s for writing", fixtureFileName)
+		}
+		_, err = fd.Write(data)
+		if err != nil {
+			t.Fatalf("unable to write to fixture file %s", fixtureFileName)
+		}
+		t.Logf("Saved a test fixture file for party %d: %s", index, fixtureFileName)
+	} else {
+		t.Logf("Fixture file already exists for party %d; not re-creating: %s", index, fixtureFileName)
+	}
+	//
+}

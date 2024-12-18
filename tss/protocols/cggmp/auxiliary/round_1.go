@@ -121,7 +121,7 @@ func AuxRound1Accept(sessionId string, recv []byte) (result utils.TssResult) {
 		return
 	}
 
-	msg, from, err := utils.ParseMpcMsg(recv, sessionId)
+	msg, router, err := utils.ParseMpcMsg(recv, sessionId)
 	if err != nil {
 		common.Logger.Errorf("parse recv msg err: %s", err.Error())
 		result.Err = err.Error()
@@ -135,7 +135,8 @@ func AuxRound1Accept(sessionId string, recv []byte) (result utils.TssResult) {
 		return
 	}
 	result.Ok = true
-	party.temp.auxRound1Messages[from] = msg
+
+	party.temp.auxRound1Messages[router.From.Index] = msg
 	return
 }
 

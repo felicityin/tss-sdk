@@ -232,7 +232,7 @@ func OnSignRound3MsgAccept(sessionId string, recv []byte) (result utils.TssResul
 		return
 	}
 
-	msg, from, err := utils.ParseMpcMsg(recv, sessionId)
+	msg, router, err := utils.ParseMpcMsg(recv, sessionId)
 	if err != nil {
 		common.Logger.Errorf("parse recv r3msg err: %s", err.Error())
 		result.Err = err.Error()
@@ -245,7 +245,7 @@ func OnSignRound3MsgAccept(sessionId string, recv []byte) (result utils.TssResul
 	}
 
 	result.Ok = true
-	party.temp.signRound3Messages[from] = msg
+	party.temp.signRound3Messages[router.From.Index] = msg
 	return
 }
 

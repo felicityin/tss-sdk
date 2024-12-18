@@ -33,6 +33,7 @@ type (
 		sessionId          string
 		sessionKind        string
 		deviceToPartyIndex map[string]int
+		index              int
 	}
 
 	localMessageStore struct {
@@ -186,6 +187,7 @@ func NewLocalParty(
 		sessionId:          sessionId,
 		sessionKind:        sessionKind,
 		deviceToPartyIndex: partyIndexs,
+		index:              partyIndex,
 	}
 
 	// msgs init

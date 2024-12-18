@@ -17,7 +17,7 @@ func KeygenRound2Exec(sessionId string) (result utils.TssExecResult) {
 	round.resetOK()
 
 	i := round.PartyID().Index
-	common.Logger.Infof("party: %d, round_2 start", i)
+	common.Logger.Infof("[%s] party: %d %s, round_2 start", sessionId, i, round.deviceId)
 
 	for j, msg := range round.temp.kgRound1Messages {
 		if j == i {
@@ -29,7 +29,7 @@ func KeygenRound2Exec(sessionId string) (result utils.TssExecResult) {
 	}
 
 	// BROADCAST de-commitments
-	common.Logger.Infof("party: %d, round_2 broadcast", i)
+	common.Logger.Infof("[%s] party: %d %s, round_2 broadcast", sessionId, i, round.deviceId)
 	{
 		r2msg1 := NewKGRound2Message1(
 			round.PartyID(),
@@ -70,9 +70,6 @@ func KeygenRound2Exec(sessionId string) (result utils.TssExecResult) {
 			return
 		}
 		round.temp.send.kgRound2Message2s[j] = utils.MpcP2pMsg(round.sessionId, round.sessionKind, Pj.Id, router, msgWireBytes)
-		if j == i {
-			round.temp.kgRound2Message2s[i] = r2msg2
-		}
 	}
 
 	result.Ok = true
@@ -104,7 +101,7 @@ func KeygenRound2Accept(sessionId string, recv []byte) (result utils.TssResult) 
 		return
 	}
 
-	msg, from, err := utils.ParseMpcMsg(recv, sessionId)
+	msg, router, err := utils.ParseMpcMsg(recv, sessionId)
 	if err != nil {
 		common.Logger.Errorf("parse recv r2msg err: %s", err.Error())
 		result.Err = err.Error()
@@ -112,9 +109,11 @@ func KeygenRound2Accept(sessionId string, recv []byte) (result utils.TssResult) 
 	}
 
 	if _, ok := msg.Content().(*TKgRound2Message1); ok {
-		party.temp.kgRound2Message1s[from] = msg
+		party.temp.kgRound2Message1s[router.From.Index] = msg
+		common.Logger.Infof("[%s] KeygenRound2Accept recv r2msg1 from  %d", sessionId, router.From.Index)
 	} else if _, ok := msg.Content().(*TKgRound2Message2); ok {
-		party.temp.kgRound2Message2s[from] = msg
+		party.temp.kgRound2Message2s[router.From.Index] = msg
+		common.Logger.Infof("[%s] KeygenRound2Accept recv r2msg2 from  %d", sessionId, router.From.Index)
 	} else {
 		result.Err = "not TKgRound2Message"
 		return
@@ -131,12 +130,16 @@ func KeygenRound2Finish(sessionId string) (result utils.TssResult) {
 		return
 	}
 
-	for j, msg := range party.temp.kgRound2Message2s {
+	for j, msg := range party.temp.kgRound2Message1s {
 		if j == party.PartyID().Index {
 			continue
 		}
 		if msg == nil {
-			result.Err = fmt.Sprintf("msg is null: %d", j)
+			result.Err = fmt.Sprintf("r2msg1 is null: %d", j)
+			return
+		}
+		if party.temp.kgRound2Message2s[j] == nil {
+			result.Err = fmt.Sprintf("r2msg2 is null: %d", j)
 			return
 		}
 	}

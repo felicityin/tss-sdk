@@ -61,6 +61,7 @@ type (
 		IsToOldCommittee bool
 		// whether the message should be sent to both old and new committee participants
 		IsToOldAndNewCommittees bool
+		Round                   string
 	}
 
 	// Implements ParsedMessage; this is a concrete implementation of what messages produced by a LocalParty look like

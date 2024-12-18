@@ -41,9 +41,9 @@ func partyId(peer string) *big.Int {
 	return new(big.Int).SetBytes(h.Sum(nil))
 }
 
-func SortPartys(deviceId string, partyDevices []string, connIds []uint64) (deviceToPartyIndex map[string]int, pids tss.SortedPartyIDs) {
-	peers := make([]*PeerId, 0, len(partyDevices))
-	for i, peer := range partyDevices {
+func SortPartys(deviceId string, allDevices []string, connIds []uint64) (deviceToPartyIndex map[string]int, pids tss.SortedPartyIDs) {
+	peers := make([]*PeerId, 0, len(allDevices))
+	for i, peer := range allDevices {
 		peers = append(peers, &PeerId{
 			id:       partyId(peer),
 			deviceId: peer,
@@ -56,7 +56,7 @@ func SortPartys(deviceId string, partyDevices []string, connIds []uint64) (devic
 	})
 
 	deviceToPartyIndex = make(map[string]int)
-	ids := make(tss.SortedPartyIDs, 0, len(partyDevices))
+	ids := make(tss.SortedPartyIDs, 0, len(allDevices))
 	for i, peer := range peers {
 		id := tss.NewPartyID(
 			strconv.FormatUint(uint64(peer.connId), 10),
@@ -65,11 +65,32 @@ func SortPartys(deviceId string, partyDevices []string, connIds []uint64) (devic
 		)
 		id.Index = i
 		ids = append(ids, id)
-		common.Logger.Infof("sorted peer, index: %d, device id: %s, conn id: %d, id: %d", i, peer.deviceId, peer.connId, peer.id)
+		common.Logger.Infof("sorted peer, index: %d, device id: %s, conn id: %d, id: %d", id.Index, peer.deviceId, peer.connId, peer.id)
 
 		deviceToPartyIndex[peer.deviceId] = i
 	}
 	return deviceToPartyIndex, ids
+}
+
+func PartyIndex(deviceId string, allDevices []string) int {
+	peers := make([]*PeerId, 0, len(allDevices))
+	for _, device := range allDevices {
+		peers = append(peers, &PeerId{
+			id:       partyId(device),
+			deviceId: device,
+		})
+	}
+
+	sort.Slice(peers, func(i, j int) bool {
+		return peers[i].id.Cmp(peers[j].id) < 0
+	})
+
+	for i, peer := range peers {
+		if peer.deviceId == deviceId {
+			return i
+		}
+	}
+	return -1
 }
 
 func MpcBroadcastMsg(sessionId, sessionKind string, router *tss.MessageRouting, data []byte) []byte {
@@ -106,31 +127,35 @@ func MpcP2pMsg(sessionId, sessionKind, peerId string, router *tss.MessageRouting
 	return msg
 }
 
-func ParseMpcMsg(recv []byte, sessionId string) (msg tss.ParsedMessage, from int, err error) {
+func ParseMpcMsg(recv []byte, sessionId string) (msg tss.ParsedMessage, router *tss.MessageRouting, err error) {
+	wsMsg := &msgs.WsMsg{}
+	if err = proto.Unmarshal(recv, wsMsg); err != nil {
+		err = fmt.Errorf("proto unmarshal ws msg error: %s", err.Error())
+		return
+	}
+
 	data := &msgs.SessionMessageParams{}
-	if err = proto.Unmarshal(recv, data); err != nil {
-		err = fmt.Errorf("[%s] unmarshal params error: %s", msgs.SessionMsg, err.Error())
+	if err = proto.Unmarshal(wsMsg.Params, data); err != nil {
+		err = fmt.Errorf("proto unmarshal session params error: %s", err.Error())
 		return
 	}
 
-	if data.SessionId != sessionId {
-		err = fmt.Errorf("session id should be %s, but %s", sessionId, data.SessionId)
-		return
-	}
-
-	var router *tss.MessageRouting
 	if err = json.Unmarshal(data.Router, &router); err != nil {
 		err = fmt.Errorf("recive invaild router msg, err: %s", err.Error())
 		return
 	}
-	common.Logger.Infof("recv msg from: %d %s %s", router.From.Index, router.From.Moniker, router.From.Id)
+	common.Logger.Infof("[%s %s] recv msg from: %d %s %s", sessionId, router.Round, router.From.Index, router.From.Moniker, router.From.Id)
 
 	msg, err = tss.ParseWireMessage(data.Msg, router.From, router.IsBroadcast)
 	if err != nil {
 		err = fmt.Errorf("parse wire msg err:%s", err.Error())
 		return
 	}
-	return msg, router.From.Index, nil
+	return msg, router, nil
+}
+
+func ShouldAccept(router *tss.MessageRouting, index int) bool {
+	return router.From.Index != index && (router.IsBroadcast || (!router.IsBroadcast && router.To[0].Index == index))
 }
 
 func ParseRecvMsg(msgWireBytes string) (msg tss.ParsedMessage, err error) {
