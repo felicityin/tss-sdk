@@ -32,6 +32,7 @@ type (
 		sessionId          string
 		sessionKind        string
 		deviceToPartyIndex map[string]int
+		deviceId           string
 	}
 
 	localMessageStore struct {
@@ -147,6 +148,7 @@ func NewLocalParty(
 		sessionId:          sessionId,
 		sessionKind:        sessionKind,
 		deviceToPartyIndex: partyIndexs,
+		deviceId:           deviceId,
 	}
 	// msgs init
 	p.temp.signRound1Messages = make([]tss.ParsedMessage, partyCount)
@@ -161,7 +163,6 @@ func NewLocalParty(
 	}
 	p.temp.m = new(big.Int).SetBytes(m)
 	p.temp.fullBytesLen = len(m)
-	common.Logger.Infof("==========p.temp.fullBytesLen: %d", p.temp.fullBytesLen)
 	p.temp.isThreshold = isThreshold
 	p.temp.Rj = make([]*crypto.ECPoint, partyCount)
 

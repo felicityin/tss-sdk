@@ -88,7 +88,7 @@ func KeygenRound2Finish(key string) (result utils.TssResult) {
 			continue
 		}
 		if msg == nil {
-			result.Err = fmt.Sprintf("msg is null: %d", j)
+			result.Err = fmt.Sprintf("r2msg is null: %d", j)
 			return
 		}
 	}

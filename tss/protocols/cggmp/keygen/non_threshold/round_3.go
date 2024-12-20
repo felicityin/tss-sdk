@@ -150,7 +150,7 @@ func KeygenRound3Finish(key string) (result u.TssResult) {
 			continue
 		}
 		if msg == nil {
-			result.Err = fmt.Sprintf("msg is null: %d", j)
+			result.Err = fmt.Sprintf("r3msg is null: %d", j)
 			return
 		}
 	}

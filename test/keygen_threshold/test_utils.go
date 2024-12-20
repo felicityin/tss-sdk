@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"math/rand"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -17,12 +16,8 @@ import (
 )
 
 const (
-	// To change these parameters, you must first delete the text fixture files in test/_fixtures/ and then run the keygen test alone.
-	// Then the signing and resharing tests will work with the new n, t configuration using the newly written fixture files.
-	TestParticipants = 2
-	TestThreshold    = 2
-	Ecdsa            = 0
-	Eddsa            = 1
+	Ecdsa = 0
+	Eddsa = 1
 )
 
 const (
@@ -52,10 +47,6 @@ func LoadKeygenTestFixtures(kind, qty int, optionalStart ...int) ([]save.LocalPa
 				"could not unmarshal fixture data for party %d located at: %s",
 				i, fixtureFilePath)
 		}
-		for _, kbxj := range key.PubXj {
-			kbxj.SetCurve(tss.Edwards())
-		}
-		key.Pubkey.SetCurve(tss.Edwards())
 		keys = append(keys, key)
 	}
 	partyIDs := make(tss.UnSortedPartyIDs, len(keys))
@@ -71,10 +62,7 @@ func LoadKeygenTestFixturesRandomSet(kind, qty, fixtureCount int) ([]save.LocalP
 	keys := make([]save.LocalPartySaveData, 0, qty)
 	plucked := make(map[int]interface{}, qty)
 	for i := 0; len(plucked) < qty; i = (i + 1) % fixtureCount {
-		_, have := plucked[i]
-		if pluck := rand.Float32() < 0.5; !have && pluck {
-			plucked[i] = new(struct{})
-		}
+		plucked[i] = new(struct{})
 	}
 	for i := range plucked {
 		fixtureFilePath := makeTestFixtureFilePath(kind, i)

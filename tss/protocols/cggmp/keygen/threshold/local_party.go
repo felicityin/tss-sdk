@@ -1,6 +1,7 @@
 package keygen
 
 import (
+	"encoding/hex"
 	"fmt"
 	"math/big"
 
@@ -77,7 +78,7 @@ var Parties = map[string]*LocalParty{}
 func NewLocalParty(
 	logLevel string, // "info, debug, error"
 	algo string, // ecdsa or eddsa
-	threshold int, // threshold <= n
+	threshold int, // threshold < n
 	sessionId string,
 	sessionKind string,
 	deviceId string,
@@ -100,6 +101,15 @@ func NewLocalParty(
 		common.Logger.Errorf("unknown alog: %s", algo)
 		result.Err = fmt.Sprintf("unknown alog: %s", algo)
 		return
+	}
+
+	priv, err := hex.DecodeString(rootPrivKey)
+	if err != nil {
+		return utils.TssResult{Ok: false, Err: fmt.Sprintf("decode root privkey err: %s", err.Error())}
+	}
+	chaincode, err := hex.DecodeString(chainCode)
+	if err != nil {
+		return utils.TssResult{Ok: false, Err: fmt.Sprintf("decode chain code err: %s", err.Error())}
 	}
 
 	partyCount := len(allDevices)
@@ -125,6 +135,9 @@ func NewLocalParty(
 	}
 
 	data := save.NewLocalPartySaveData(partyCount)
+	data.ChainCode = new(big.Int).SetBytes(chaincode)
+	data.PrivXi = new(big.Int).SetBytes(priv)
+
 	p := &LocalParty{
 		BaseParty:          new(tss.BaseParty),
 		params:             params,
@@ -133,6 +146,7 @@ func NewLocalParty(
 		ok:                 make([]bool, partyCount),
 		sessionId:          sessionId,
 		DeviceToPartyIndex: partyIndexs,
+		deviceId:           deviceId,
 		index:              partyIndex,
 	}
 

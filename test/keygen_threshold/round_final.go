@@ -19,8 +19,8 @@ func (round *round4) Start() error {
 
 	msg := tssdk.TKeygenRound4Exec(round.sessionId)
 	if !msg.Ok {
-		common.Logger.Errorf("TKeygenRound1Exec err: %s", msg.Err)
-		return fmt.Errorf("TKeygenRound1Exec err: %s", msg.Err)
+		common.Logger.Errorf("TKeygenRound4Exec err: %s", msg.Err)
+		return fmt.Errorf("TKeygenRound4Exec err: %s", msg.Err)
 	}
 
 	common.Logger.Infof("party: %s, round_4 broadcast", round.deviceId)

@@ -17,7 +17,7 @@ func KeygenRound2Exec(sessionId string) (result utils.TssExecResult) {
 	round.resetOK()
 
 	i := round.PartyID().Index
-	common.Logger.Infof("[%s] party: %d %s, round_2 start", sessionId, i, round.deviceId)
+	common.Logger.Infof("[%s] party: %d %d %s, round_2 start", sessionId, i, round.DeviceToPartyIndex[round.deviceId], round.deviceId)
 
 	for j, msg := range round.temp.kgRound1Messages {
 		if j == i {

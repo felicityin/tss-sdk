@@ -121,7 +121,7 @@ func KeygenRound1Finish(sessionId string) (result utils.TssResult) {
 			continue
 		}
 		if msg == nil {
-			result.Err = fmt.Sprintf("msg is null: %d", j)
+			result.Err = fmt.Sprintf("r1msg is null: %d", j)
 			return
 		}
 	}

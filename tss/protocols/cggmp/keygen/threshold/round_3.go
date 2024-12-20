@@ -101,7 +101,7 @@ func KeygenRound3Exec(sessionId string) (result u.TssExecResult) {
 			Share:     share,
 		}
 		if ok = PjShare.Verify(round.params.EC(), round.params.Threshold(), PjVs); !ok {
-			err := fmt.Sprintf("[j: %d] vss verify failed", j)
+			err := fmt.Sprintf("[i: %d, j: %d] vss verify failed", i, j)
 			common.Logger.Error(err)
 			result.Err = err
 			return

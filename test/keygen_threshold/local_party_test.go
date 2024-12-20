@@ -8,7 +8,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/ipfs/go-log"
 	"github.com/stretchr/testify/assert"
 
 	"tss-sdk/msgs"
@@ -16,11 +15,12 @@ import (
 	"tss-sdk/tss/common"
 )
 
-func setUp(level string) {
-	if err := log.SetLogLevel("tss-lib", level); err != nil {
-		panic(err)
-	}
-}
+const (
+	// To change these parameters, you must first delete the text fixture files in test/_fixtures/ and then run the keygen test alone.
+	// Then the signing and resharing tests will work with the new n, t configuration using the newly written fixture files.
+	TestParticipants = 3
+	TestThreshold    = 2
+)
 
 func TestEcdsaE2EConcurrentAndSaveFixtures(t *testing.T) {
 	testE2EConcurrentAndSaveFixtures(t, Ecdsa)
@@ -31,8 +31,6 @@ func TestEddsaE2EConcurrentAndSaveFixtures(t *testing.T) {
 }
 
 func testE2EConcurrentAndSaveFixtures(t *testing.T, kind int) {
-	setUp("debug")
-
 	const (
 		sessionId   = "kg"
 		rootPrivKey = "3acd00a8164031b61c7c6a578137b83d5c0b57d6dbd8617ece480ec9078442c7"
@@ -65,7 +63,7 @@ func testE2EConcurrentAndSaveFixtures(t *testing.T, kind int) {
 	endCh := make(chan *SaveData, n)
 
 	parties := make([]*LocalParty, n, n)
-	updater := test.SharedPartyUpdater
+	updater := test.SharedPartyUpdaterDebug
 	startGR := runtime.NumGoroutine()
 
 	// init the parties

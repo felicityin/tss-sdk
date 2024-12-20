@@ -47,6 +47,9 @@ func KeygenRound1Exec(sessionId string) (result utils.TssExecResult) {
 		result.Err = fmt.Sprintf("vss.Create err: %s", err.Error())
 		return
 	}
+	for j, share := range shares {
+		common.Logger.Infof("i: %d, j: %d, r1, share: %d", i, j, share)
+	}
 	round.data.Ks = ids
 	round.temp.vs = vs
 	round.temp.shares = shares
@@ -153,7 +156,7 @@ func KeygenRound1Finish(sessionId string) (result utils.TssResult) {
 			continue
 		}
 		if msg == nil {
-			err := fmt.Sprintf("[%s] msg is null: %d", sessionId, j)
+			err := fmt.Sprintf("[%s] r1msg is null: %d", sessionId, j)
 			common.Logger.Error(err)
 			result.Err = err
 			return

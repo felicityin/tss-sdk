@@ -29,6 +29,7 @@ type (
 		sessionKind        string
 		deviceToPartyIndex map[string]int
 		index              int
+		deviceId           string
 	}
 
 	localMessageStore struct {
@@ -91,6 +92,7 @@ func NewLocalParty(
 		save:               NewLocalPartySaveData(partyCount),
 		ok:                 make([]bool, partyCount),
 		sessionId:          sessionId,
+		deviceId:           deviceId,
 		deviceToPartyIndex: partyIndexs,
 		index:              partyIndex,
 	}

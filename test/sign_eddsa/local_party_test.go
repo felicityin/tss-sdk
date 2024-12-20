@@ -19,7 +19,7 @@ import (
 const (
 	// To change these parameters, you must first delete the text fixture files in test/_fixtures/ and then run the keygen test alone.
 	// Then the signing and resharing tests will work with the new n, t configuration using the newly written fixture files.
-	TestParticipants = 2
+	TestParticipants = 3
 	TestThreshold    = 2
 )
 
@@ -31,7 +31,6 @@ func TestE2EThresholdConcurrent(t *testing.T) {
 	assert.NoError(t, err, "should load keygen fixtures")
 	assert.Equal(t, n, len(keys))
 	assert.Equal(t, n, len(signPIDs))
-	// assert.True(t, false)
 
 	const (
 		sessionId = "sign"
@@ -56,11 +55,7 @@ func TestE2EThresholdConcurrent(t *testing.T) {
 	endCh := make(chan *SaveData, n)
 
 	parties := make([]*LocalParty, n, n)
-	updater := test.SharedPartyUpdater
-
-	for i := 0; i < n; i++ {
-		fmt.Printf("-----------%d, shareid: %d\n", i, keys[i].ShareID)
-	}
+	updater := test.SharedPartyUpdaterDebug
 
 	// init the parties
 	for i := 0; i < n; i++ {

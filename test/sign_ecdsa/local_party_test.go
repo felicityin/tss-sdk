@@ -1,9 +1,9 @@
-package auxiliary
+package sign
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
-	"os"
-	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -12,6 +12,8 @@ import (
 
 	"tss-sdk/msgs"
 	"tss-sdk/test"
+	"tss-sdk/test/auxiliary"
+	keygen "tss-sdk/test/keygen_threshold"
 	"tss-sdk/tss/common"
 )
 
@@ -19,18 +21,31 @@ const (
 	// To change these parameters, you must first delete the text fixture files in test/_fixtures/ and then run the keygen test alone.
 	// Then the signing and resharing tests will work with the new n, t configuration using the newly written fixture files.
 	TestParticipants = 3
+	TestThreshold    = 2
 )
 
-func TestE2EConcurrentAndSaveFixtures(t *testing.T) {
+func TestE2EThresholdConcurrent(t *testing.T) {
+	n := TestThreshold
+
+	// PHASE: load keygen fixtures
+	keys, signPIDs, err := keygen.LoadKeygenTestFixturesRandomSet(keygen.Ecdsa, n, TestParticipants)
+	assert.NoError(t, err, "should load keygen fixtures")
+	assert.Equal(t, n, len(keys))
+	assert.Equal(t, n, len(signPIDs))
+
+	auxs, _, err := auxiliary.LoadAuxTestFixtures(keygen.Ecdsa, n)
+	assert.NoError(t, err, "should load aux fixtures")
+	assert.Equal(t, n, len(auxs))
+
 	const (
-		sessionId = "aux"
+		sessionId = "sign"
+		msg       = "00f163ee51bcaeff9cdff5e0e3c1a646abd19885fffbab0b3b4236e0cf95c9f5"
+		path      = "0/1/2/2/10"
 	)
 	var (
 		allDevices []string
 		connIds    []string
 	)
-
-	n := TestParticipants
 
 	allDevices = make([]string, n)
 	connIds = make([]string, n)
@@ -46,17 +61,30 @@ func TestE2EConcurrentAndSaveFixtures(t *testing.T) {
 
 	parties := make([]*LocalParty, n, n)
 	updater := test.SharedPartyUpdaterDebug
-	startGR := runtime.NumGoroutine()
 
 	// init the parties
 	for i := 0; i < n; i++ {
+		key, err := json.Marshal(keys[i])
+		assert.NoError(t, err)
+
+		aux, err := json.Marshal(auxs[i])
+		assert.NoError(t, err)
+
+		keyData := base64.StdEncoding.EncodeToString(key)
+		auxData := base64.StdEncoding.EncodeToString(aux)
+
 		party := NewLocalParty(
 			"info",
+			TestThreshold,
 			fmt.Sprintf("%s-%s", sessionId, allDevices[i]),
-			msgs.SessionKindEcdsaAux,
+			msgs.SessionKindEcdsaSign,
 			allDevices[i],
 			strings.Join(allDevices, ","),
 			strings.Join(connIds, ","),
+			msg,
+			keyData,
+			auxData,
+			path,
 			outCh,
 			endCh,
 		).(*LocalParty)
@@ -70,53 +98,25 @@ func TestE2EConcurrentAndSaveFixtures(t *testing.T) {
 	}
 
 	var ended int32
-AUX:
+SIGN:
 	for {
-		common.Logger.Debugf("ACTIVE GOROUTINES: %d\n", runtime.NumGoroutine())
 		select {
 		case err := <-errCh:
 			common.Logger.Errorf("Error: %s", err)
 			assert.FailNow(t, err.Error())
-			break AUX
+			break SIGN
 
 		case msg := <-outCh:
 			for _, P := range parties {
 				go updater(P, msg, errCh)
 			}
 
-		case save := <-endCh:
-			common.Logger.Debugf("reveive save data")
-
-			tryWriteTestFixtureFile(t, save.PartyIndex, save.Data)
-
+		case <-endCh:
 			atomic.AddInt32(&ended, 1)
 			if atomic.LoadInt32(&ended) == int32(n) {
-				t.Logf("Done. Received save data from %d participants", ended)
-				t.Logf("Start goroutines: %d, End goroutines: %d", startGR, runtime.NumGoroutine())
-				break AUX
+				t.Log("ECDSA signing test done.")
+				break SIGN
 			}
 		}
 	}
-}
-
-func tryWriteTestFixtureFile(t *testing.T, index int, data []byte) {
-	fixtureFileName := makeTestFixtureFilePath(index)
-
-	// fixture file does not already exist?
-	// if it does, we won't re-create it here
-	fi, err := os.Stat(fixtureFileName)
-	if !(err == nil && fi != nil && !fi.IsDir()) {
-		fd, err := os.OpenFile(fixtureFileName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
-		if err != nil {
-			assert.NoErrorf(t, err, "unable to open fixture file %s for writing", fixtureFileName)
-		}
-		_, err = fd.Write(data)
-		if err != nil {
-			t.Fatalf("unable to write to fixture file %s", fixtureFileName)
-		}
-		t.Logf("Saved a test fixture file for party %d: %s", index, fixtureFileName)
-	} else {
-		t.Logf("Fixture file already exists for party %d; not re-creating: %s", index, fixtureFileName)
-	}
-	//
 }

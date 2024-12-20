@@ -182,7 +182,7 @@ func OnSignRound2Finish(sessionId string) (result utils.TssResult) {
 
 	for j, msg := range party.temp.signRound2Messages {
 		if msg == nil {
-			result.Err = fmt.Sprintf("msg is null: %d", j)
+			result.Err = fmt.Sprintf("r2msg is null: %d", j)
 			return
 		}
 	}

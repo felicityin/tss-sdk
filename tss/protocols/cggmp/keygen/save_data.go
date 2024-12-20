@@ -47,7 +47,9 @@ func NewLocalPartySaveData(partyCount int) (saveData LocalPartySaveData) {
 func (save LocalPartySaveData) OriginalIndex() (int, error) {
 	index := -1
 	ki := save.ShareID
+	common.Logger.Infof("ki: %d", ki)
 	for j, kj := range save.Ks {
+		common.Logger.Infof("j: %d, kj: %d", j, kj)
 		if kj.Cmp(ki) != 0 {
 			continue
 		}
