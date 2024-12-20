@@ -1,6 +1,6 @@
 module tss-sdk
 
-go 1.22
+go 1.22.0
 
 toolchain go1.22.9
 
@@ -45,8 +45,11 @@ require (
 	go.uber.org/multierr v1.6.0 // indirect
 	go.uber.org/zap v1.16.0 // indirect
 	golang.org/x/lint v0.0.0-20200302205851-738671d3881b // indirect
-	golang.org/x/sys v0.22.0 // indirect
-	golang.org/x/tools v0.21.0 // indirect
+	golang.org/x/mobile v0.0.0-20241213221354-a87c1cf6cf46 // indirect
+	golang.org/x/mod v0.22.0 // indirect
+	golang.org/x/sync v0.10.0 // indirect
+	golang.org/x/sys v0.28.0 // indirect
+	golang.org/x/tools v0.28.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	honnef.co/go/tools v0.1.3 // indirect
