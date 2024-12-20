@@ -165,12 +165,16 @@ func OnSignRound1Finish(sessionId string) (result utils.TssResult) {
 		return
 	}
 
-	for j, msg := range party.temp.signRound1Message2s {
+	for j, msg := range party.temp.signRound1Message1s {
 		if j == party.PartyID().Index {
 			continue
 		}
 		if msg == nil {
-			result.Err = fmt.Sprintf("msg is null: %d", j)
+			result.Err = fmt.Sprintf("r1msg1 is null: %d", j)
+			return
+		}
+		if party.temp.signRound1Message2s[j] == nil {
+			result.Err = fmt.Sprintf("r1msg2 is null: %d", j)
 			return
 		}
 	}

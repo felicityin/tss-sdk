@@ -36,6 +36,7 @@ func NewSignRound1Message1(
 	meta := tss.MessageRouting{
 		From:        from,
 		IsBroadcast: true,
+		Round:       "r1msg1",
 	}
 	content := &SignRound1Message1{
 		KCiphertext:     kCiphertext.Bytes(),
@@ -73,6 +74,7 @@ func NewSignRound1Message2(
 		From:        from,
 		To:          []*tss.PartyID{to},
 		IsBroadcast: false,
+		Round:       "r1msg2",
 	}
 	content := &SignRound1Message2{
 		EncProof: encProofBytes,
@@ -131,6 +133,7 @@ func NewSignRound2Message(
 		From:        from,
 		To:          []*tss.PartyID{to},
 		IsBroadcast: false,
+		Round:       "r2msg",
 	}
 	content := &SignRound2Message{
 		BigGamma:     GammaBytes,
@@ -213,6 +216,7 @@ func NewSignRound3Message(
 		From:        from,
 		To:          []*tss.PartyID{to},
 		IsBroadcast: false,
+		Round:       "r3msg",
 	}
 	content := &SignRound3Message{
 		Delta:    delta.Bytes(),
@@ -259,6 +263,7 @@ func NewSignRound4Message(
 	meta := tss.MessageRouting{
 		From:        from,
 		IsBroadcast: true,
+		Round:       "r4msg",
 	}
 	content := &SignRound4Message{
 		Sigma: si.Bytes(),

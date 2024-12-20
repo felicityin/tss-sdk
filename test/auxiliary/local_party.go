@@ -39,6 +39,7 @@ type (
 
 // Exported, used in `tss` client
 func NewLocalParty(
+	logLevel string, // "info, debug, error"
 	sessionId string,
 	sessionKind string,
 	deviceId string,
@@ -48,7 +49,7 @@ func NewLocalParty(
 	end chan<- *SaveData,
 ) tss.Party {
 	party := tssdk.NewAuxLocalParty(
-		sessionId, sessionKind, deviceId, allDevices, connIds,
+		logLevel, sessionId, sessionKind, deviceId, allDevices, connIds,
 	)
 	if !party.Ok {
 		common.Logger.Error(party.Err)

@@ -68,12 +68,12 @@ func OnSignRound1MsgAccept(sessionId string, recv []byte) (result utils.TssResul
 		return
 	}
 
-	if _, ok := msg.Content().(*SignRound1Message); ok {
-		party.temp.signRound1Messages[router.From.Index] = msg
-	} else {
+	if _, ok := msg.Content().(*SignRound1Message); !ok {
 		result.Err = "not SignRound1Message"
 		return
 	}
+
+	party.temp.signRound1Messages[router.From.Index] = msg
 	result.Ok = true
 	return
 }

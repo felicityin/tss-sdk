@@ -75,6 +75,7 @@ var Parties = map[string]*LocalParty{}
 
 // Exported, used in `tss` client
 func NewLocalParty(
+	logLevel string, // "info, debug, error"
 	algo string, // ecdsa or eddsa
 	threshold int, // threshold <= n
 	sessionId string,
@@ -85,7 +86,7 @@ func NewLocalParty(
 	rootPrivKey string, // hex string
 	chainCode string, // hex string
 ) (result utils.TssResult) {
-	if err := log.SetLogLevel("tss-lib", "info"); err != nil {
+	if err := log.SetLogLevel("tss-lib", logLevel); err != nil {
 		common.Logger.Errorf("set log level, err: %s", err.Error())
 		result.Err = fmt.Sprintf("set log level, err: %s", err.Error())
 		return
@@ -114,9 +115,9 @@ func NewLocalParty(
 
 	var params *tss.Parameters
 	if algo == "ecdsa" {
-		params = tss.NewParameters(tss.S256(), p2pCtx, pIds[partyIndex], partyCount, threshold-1)
+		params = tss.NewParameters(tss.S256(), p2pCtx, pIds[partyIndex], partyCount, threshold)
 	} else if algo == "eddsa" {
-		params = tss.NewParameters(tss.Edwards(), p2pCtx, pIds[partyIndex], partyCount, threshold-1)
+		params = tss.NewParameters(tss.Edwards(), p2pCtx, pIds[partyIndex], partyCount, threshold)
 	} else {
 		common.Logger.Errorf("unknown algo: %s", algo)
 		result.Err = fmt.Sprintf("unknown algo: %s", algo)

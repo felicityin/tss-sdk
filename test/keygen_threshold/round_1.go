@@ -49,8 +49,7 @@ func (round *round1) Start() error {
 func (round *round1) Update() (bool, error) {
 	res := tssdk.TKeygenRound1Finish(round.sessionId)
 	if !res.Ok {
-		common.Logger.Errorf("TKeygenRound1Finish err: %s, %s", res.Err, round.sessionId)
-		return false, nil // err must be nil, import!!!
+		return false, nil // err must be nil, important!!!
 	}
 	for i := 0; i < round.n; i++ {
 		round.ok[i] = true

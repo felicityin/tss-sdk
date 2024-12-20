@@ -35,7 +35,6 @@ func testE2EConcurrentAndSaveFixtures(t *testing.T, kind int) {
 
 	const (
 		sessionId   = "kg"
-		deviceId    = "test-device"
 		rootPrivKey = "3acd00a8164031b61c7c6a578137b83d5c0b57d6dbd8617ece480ec9078442c7"
 		chainCode   = "4acd00a8164031b61c7c6a578137b83d5c0b57d6dbd8617ece480ec9078442c7"
 	)
@@ -57,7 +56,7 @@ func testE2EConcurrentAndSaveFixtures(t *testing.T, kind int) {
 	connIds = make([]string, n)
 
 	for i := 0; i < n; i++ {
-		allDevices[i] = fmt.Sprintf("%s-%d", deviceId, i)
+		allDevices[i] = fmt.Sprintf("%d", i)
 		connIds[i] = fmt.Sprintf("%d", i)
 	}
 
@@ -72,6 +71,7 @@ func testE2EConcurrentAndSaveFixtures(t *testing.T, kind int) {
 	// init the parties
 	for i := 0; i < n; i++ {
 		party := NewLocalParty(
+			"info",
 			algo,
 			TestThreshold,
 			fmt.Sprintf("%s-%s", sessionId, allDevices[i]),
@@ -117,9 +117,7 @@ keygen:
 			atomic.AddInt32(&ended, 1)
 			if atomic.LoadInt32(&ended) == int32(n) {
 				t.Logf("Done. Received save data from %d participants", ended)
-				t.Log("ECDSA signing test done.")
 				t.Logf("Start goroutines: %d, End goroutines: %d", startGR, runtime.NumGoroutine())
-
 				break keygen
 			}
 		}

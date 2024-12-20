@@ -1,7 +1,6 @@
 package auxiliary
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"runtime"
@@ -9,7 +8,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/ipfs/go-log"
 	"github.com/stretchr/testify/assert"
 
 	"tss-sdk/msgs"
@@ -17,18 +15,9 @@ import (
 	"tss-sdk/tss/common"
 )
 
-func setUp(level string) {
-	if err := log.SetLogLevel("tss-lib", level); err != nil {
-		panic(err)
-	}
-}
-
 func TestE2EConcurrentAndSaveFixtures(t *testing.T) {
-	setUp("debug")
-
 	const (
 		sessionId = "aux"
-		deviceId  = "test-device"
 	)
 	var (
 		allDevices []string
@@ -41,7 +30,7 @@ func TestE2EConcurrentAndSaveFixtures(t *testing.T) {
 	connIds = make([]string, n)
 
 	for i := 0; i < n; i++ {
-		allDevices[i] = fmt.Sprintf("%s-%d", deviceId, i)
+		allDevices[i] = fmt.Sprintf("%d", i)
 		connIds[i] = fmt.Sprintf("%d", i)
 	}
 
@@ -56,6 +45,7 @@ func TestE2EConcurrentAndSaveFixtures(t *testing.T) {
 	// init the parties
 	for i := 0; i < n; i++ {
 		party := NewLocalParty(
+			"info",
 			fmt.Sprintf("%s-%s", sessionId, allDevices[i]),
 			msgs.SessionKindEcdsaAux,
 			allDevices[i],
@@ -114,11 +104,7 @@ func tryWriteTestFixtureFile(t *testing.T, index int, data []byte) {
 		if err != nil {
 			assert.NoErrorf(t, err, "unable to open fixture file %s for writing", fixtureFileName)
 		}
-		bz, err := json.Marshal(&data)
-		if err != nil {
-			t.Fatalf("unable to marshal save data for fixture file %s", fixtureFileName)
-		}
-		_, err = fd.Write(bz)
+		_, err = fd.Write(data)
 		if err != nil {
 			t.Fatalf("unable to write to fixture file %s", fixtureFileName)
 		}

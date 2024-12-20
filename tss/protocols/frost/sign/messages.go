@@ -36,6 +36,7 @@ func NewSignRound1Message(
 	meta := tss.MessageRouting{
 		From:        from,
 		IsBroadcast: true,
+		Round:       "r1msg",
 	}
 	content := &SignRound1Message{
 		D: d,
@@ -74,6 +75,7 @@ func NewSignRound2Message(
 	meta := tss.MessageRouting{
 		From:        from,
 		IsBroadcast: true,
+		Round:       "r2msg",
 	}
 	content := &SignRound2Message{
 		Si: z.Bytes(),

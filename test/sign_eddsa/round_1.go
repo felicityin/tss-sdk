@@ -1,4 +1,4 @@
-package auxiliary
+package sign
 
 import (
 	"errors"
@@ -9,7 +9,7 @@ import (
 	"tss-sdk/tss/common"
 )
 
-// round 1 represents round 1 of the keygen part of the EDDSA TSS spec
+// round 1 represents round 1 of the signing part of the EDDSA TSS spec
 func newRound1(
 	n int,
 	index int,
@@ -26,25 +26,24 @@ func newRound1(
 
 func (round *round1) Start() error {
 	if round.started {
-		return errors.New("round 1 already started")
+		return errors.New("round already started")
 	}
+
 	round.number = 1
 	round.started = true
 	round.resetOK()
 
-	msg := tssdk.AuxRound1Exec(round.sessionId)
+	msg := tssdk.EddsaSignRound1Exec(round.sessionId)
 	if !msg.Ok {
-		common.Logger.Errorf("AuxRound1Exec err: %s", msg.Err)
-		return fmt.Errorf("AuxRound1Exec err: %s", msg.Err)
+		common.Logger.Errorf("EcdsaSignRound1Exec err: %s", msg.Err)
+		return fmt.Errorf("EddsaSignRound1Exec err: %s", msg.Err)
 	}
-
-	common.Logger.Infof("[%s] party: %d, %s, round_1 broadcast", round.sessionId, round.index, round.deviceId)
 	round.out <- msg.Msg
 	return nil
 }
 
 func (round *round1) Update() (bool, error) {
-	res := tssdk.AuxRound1Finish(round.sessionId)
+	res := tssdk.EddsaSignRound1Finish(round.sessionId)
 	if !res.Ok {
 		return false, nil // err must be nil, important!!!
 	}

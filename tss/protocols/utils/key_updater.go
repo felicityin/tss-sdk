@@ -34,8 +34,7 @@ func UpdateKeyForSigning(key *keygen.LocalPartySaveData, path string, isThreshol
 		return fmt.Errorf("there should not be an error deriving the child public key: %s", err.Error())
 	}
 
-	err = UpdatePubkeyAndAdjustPubXj(key, keyDerivationDelta, extendedChildPk.PublicKey, ec)
-	if err != nil {
+	if err = UpdatePubkeyAndAdjustPubXj(key, keyDerivationDelta, extendedChildPk.PublicKey, ec); err != nil {
 		return fmt.Errorf("there should not be an error setting the derived keys: %s", err.Error())
 	}
 

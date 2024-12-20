@@ -63,12 +63,13 @@ var Parties = map[string]*LocalParty{}
 
 // Exported, used in `tss` client
 func NewLocalParty(
+	logLevel string, // "info, debug, error"
 	sessionId string,
 	deviceId string,
 	allDevices []string,
 	connIds []uint64,
 ) (result utils.TssResult) {
-	if err := log.SetLogLevel("tss-lib", "info"); err != nil {
+	if err := log.SetLogLevel("tss-lib", logLevel); err != nil {
 		common.Logger.Errorf("set log level, err: %s", err.Error())
 		result.Err = fmt.Sprintf("set log level, err: %s", err.Error())
 		return

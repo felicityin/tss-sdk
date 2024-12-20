@@ -1,8 +1,9 @@
-package auxiliary
+package sign
 
 import (
-	"errors"
 	"fmt"
+
+	"github.com/pkg/errors"
 
 	tssdk "tss-sdk/export"
 	"tss-sdk/test/tss"
@@ -11,24 +12,25 @@ import (
 
 func (round *round2) Start() error {
 	if round.started {
-		return errors.New("round 2 already started")
+		return errors.New("round already started")
 	}
+
 	round.number = 2
 	round.started = true
 	round.resetOK()
 
-	msg := tssdk.AuxRound2Exec(round.sessionId)
+	msg := tssdk.EddsaSignRound2Exec(round.sessionId)
 	if !msg.Ok {
-		common.Logger.Errorf("AuxRound2Exec err: %s", msg.Err)
-		return fmt.Errorf("AuxRound2Exec err: %s", msg.Err)
+		common.Logger.Errorf("E2dsaSignRound2Exec err: %s", msg.Err)
+		return fmt.Errorf("EddsaSignRound2Exec err: %s", msg.Err)
 	}
-	common.Logger.Infof("[%s] party: %d, %s, round_2 broadcast", round.sessionId, round.index, round.deviceId)
 	round.out <- msg.Msg
+
 	return nil
 }
 
 func (round *round2) Update() (bool, error) {
-	res := tssdk.AuxRound2Finish(round.sessionId)
+	res := tssdk.EddsaSignRound2Finish(round.sessionId)
 	if !res.Ok {
 		return false, nil // err must be nil, important!!!
 	}
@@ -40,5 +42,5 @@ func (round *round2) Update() (bool, error) {
 
 func (round *round2) NextRound() tss.Round {
 	round.started = false
-	return &round3{round}
+	return &finalization{round}
 }

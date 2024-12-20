@@ -4,10 +4,9 @@ import (
 	"crypto/elliptic"
 	"io"
 	"math/big"
+	"tss-sdk/tss/common"
 
 	"github.com/agl/ed25519/edwards25519"
-
-	"tss-sdk/tss/common"
 )
 
 func encodedBytesToBigInt(s *[32]byte) *big.Int {

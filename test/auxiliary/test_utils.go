@@ -10,6 +10,7 @@ import (
 	"github.com/pkg/errors"
 
 	"tss-sdk/tss/common"
+	save "tss-sdk/tss/protocols/cggmp/auxiliary"
 	"tss-sdk/tss/tss"
 )
 
@@ -23,8 +24,8 @@ const (
 	testFixtureFileFormat = "auxiliary_%d.json"
 )
 
-func LoadAuxTestFixtures(kind, qty int, optionalStart ...int) ([]SaveData, tss.SortedPartyIDs, error) {
-	auxs := make([]SaveData, 0, qty)
+func LoadAuxTestFixtures(kind, qty int, optionalStart ...int) ([]save.LocalPartySaveData, tss.SortedPartyIDs, error) {
+	auxs := make([]save.LocalPartySaveData, 0, qty)
 	start := 0
 	if 0 < len(optionalStart) {
 		start = optionalStart[0]
@@ -38,7 +39,7 @@ func LoadAuxTestFixtures(kind, qty int, optionalStart ...int) ([]SaveData, tss.S
 				"could not open the test fixture for party %d in the expected location: %s. run keygen tests first.",
 				i, fixtureFilePath)
 		}
-		var aux SaveData
+		var aux save.LocalPartySaveData
 		if err = json.Unmarshal(bz, &aux); err != nil {
 			return nil, nil, errors.Wrapf(err,
 				"could not unmarshal fixture data for party %d located at: %s",
@@ -47,10 +48,10 @@ func LoadAuxTestFixtures(kind, qty int, optionalStart ...int) ([]SaveData, tss.S
 		auxs = append(auxs, aux)
 	}
 	partyIDs := make(tss.UnSortedPartyIDs, len(auxs))
-	// for i, key := range auxs {
-	// 	pMoniker := fmt.Sprintf("%d", i+start+1)
-	// 	partyIDs[i] = tss.NewPartyID(pMoniker, pMoniker, key.ShareID)
-	// }
+	for i, key := range auxs {
+		pMoniker := fmt.Sprintf("%d", i+start+1)
+		partyIDs[i] = tss.NewPartyID(pMoniker, pMoniker, key.ShareID)
+	}
 	sortedPIDs := tss.SortPartyIDs(partyIDs)
 	return auxs, sortedPIDs, nil
 }

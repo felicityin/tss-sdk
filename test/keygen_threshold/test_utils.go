@@ -92,17 +92,17 @@ func LoadKeygenTestFixturesRandomSet(kind, qty, fixtureCount int) ([]save.LocalP
 		}
 		keys = append(keys, key)
 	}
+
 	partyIDs := make(tss.UnSortedPartyIDs, len(keys))
 	j := 0
 	for i := range plucked {
 		key := keys[j]
-		pMoniker := fmt.Sprintf("%d", i+1)
+		pMoniker := fmt.Sprintf("%d", i)
 		partyIDs[j] = tss.NewPartyID(pMoniker, pMoniker, key.ShareID)
 		j++
 	}
 	sortedPIDs := tss.SortPartyIDs(partyIDs)
-	sort.Slice(keys, func(i, j int) bool { return keys[i].ShareID.Cmp(keys[j].ShareID) == -1 })
-
+	sort.Slice(keys, func(i, j int) bool { return keys[i].ShareID.Cmp(keys[j].ShareID) < 0 })
 	return keys, sortedPIDs, nil
 }
 

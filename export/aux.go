@@ -10,6 +10,7 @@ import (
 )
 
 func NewAuxLocalParty(
+	logLevel string, // "info, debug, error"
 	sessionId string,
 	sessionKind string,
 	deviceId string,
@@ -20,7 +21,7 @@ func NewAuxLocalParty(
 	if err != nil {
 		return &MpcResult{Ok: false, Err: err.Error()}
 	}
-	res := aux.NewLocalParty(sessionId, deviceId, parties, connectIds)
+	res := aux.NewLocalParty(logLevel, sessionId, deviceId, parties, connectIds)
 	return toMpcRes(res)
 }
 

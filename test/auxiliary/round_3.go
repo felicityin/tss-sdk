@@ -41,7 +41,6 @@ func (round *round3) Start() error {
 func (round *round3) Update() (bool, error) {
 	res := tssdk.AuxRound3Finish(round.sessionId)
 	if !res.Ok {
-		common.Logger.Errorf("AuxRound3Finish err: %s", res.Err)
 		return false, nil
 	}
 	for i := 0; i < round.n; i++ {

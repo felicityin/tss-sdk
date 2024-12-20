@@ -10,6 +10,7 @@ import (
 )
 
 func NewTKeygenLocalParty(
+	logLevel string, // "info, debug, error"
 	algo string, // ecdsa or eddsa
 	threshold int, // threshold <= n
 	sessionId string,
@@ -25,7 +26,7 @@ func NewTKeygenLocalParty(
 		return &MpcResult{Ok: false, Err: err.Error()}
 	}
 	res := keygen.NewLocalParty(
-		algo, threshold, sessionId, sessionKind, deviceId, parties, connectIds, rootPrivKey, chainCode,
+		logLevel, algo, threshold-1, sessionId, sessionKind, deviceId, parties, connectIds, rootPrivKey, chainCode,
 	)
 	return toMpcRes(res)
 }

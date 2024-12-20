@@ -1,4 +1,4 @@
-package keygen
+package sign
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 	tssdk "tss-sdk/export"
 	"tss-sdk/test/tss"
 	"tss-sdk/tss/common"
-	keygen "tss-sdk/tss/protocols/cggmp/keygen/threshold"
+	"tss-sdk/tss/protocols/frost/sign"
 	"tss-sdk/tss/protocols/utils"
 )
 
@@ -25,35 +25,34 @@ type (
 	LocalParty struct {
 		*tss.BaseParty
 
-		// outbound messaging
-		out chan<- []byte
-		end chan<- *SaveData
-
 		n          int
 		partyIndex int
 		sessionId  string
 		deviceId   string
 		devices    []string
+
+		// outbound messaging
+		out chan<- []byte
+		end chan<- *SaveData
 	}
 )
 
-// Exported, used in `tss` client
 func NewLocalParty(
-	logLevel string,
-	algo string, // ecdsa or eddsa
-	threshold int, // threshold <= n
+	logLevel string, // "info, debug, error"
+	threshold int,
 	sessionId string,
 	sessionKind string,
 	deviceId string,
 	allDevices string, // comma separated
 	connIds string, // comma separated
-	rootPrivKey string, // hex string
-	chainCode string, // hex string
+	msg string, // hex string
+	keyData string, // keygen.LocalPartySaveData, base64 string
+	walletPath string,
 	out chan<- []byte,
 	end chan<- *SaveData,
 ) tss.Party {
-	party := tssdk.NewTKeygenLocalParty(
-		logLevel, algo, threshold, sessionId, sessionKind, deviceId, allDevices, connIds, rootPrivKey, chainCode,
+	party := tssdk.NewEddsaSignLocalParty(
+		logLevel, threshold, sessionId, sessionKind, deviceId, allDevices, connIds, msg, keyData, walletPath,
 	)
 	if !party.Ok {
 		common.Logger.Error(party.Err)
@@ -98,32 +97,22 @@ func (p *LocalParty) StoreMessage(recv []byte) (bool, error) {
 	// switch/case is necessary to store any messages beyond current round
 	// this does not handle message replays. we expect the caller to apply replay and spoofing protection.
 	switch msg.Content().(type) {
-	case *keygen.TKgRound1Message:
-		res := tssdk.TKeygenRound1Accept(p.sessionId, recv)
+	case *sign.SignRound1Message:
+		res := tssdk.EddsaSignRound1MsgAccept(p.sessionId, recv)
 		if !res.Ok {
-			common.Logger.Errorf("TKeygenRound1Accept err: %s", res.Err)
+			common.Logger.Errorf("EddsaSignRound1MsgAccept err: %s", res.Err)
 			return false, fmt.Errorf("%s", res.Err)
 		}
-	case *keygen.TKgRound2Message1:
-		res := tssdk.TKeygenRound2Accept(p.sessionId, recv)
+
+	case *sign.SignRound2Message:
+		res := tssdk.EddsaSignRound2MsgAccept(p.sessionId, recv)
 		if !res.Ok {
-			common.Logger.Errorf("TKeygenRound2Accept1 err: %s", res.Err)
+			common.Logger.Errorf("EddsaSignRound2MsgAccept err: %s", res.Err)
 			return false, fmt.Errorf("%s", res.Err)
 		}
-	case *keygen.TKgRound2Message2:
-		res := tssdk.TKeygenRound2Accept(p.sessionId, recv)
-		if !res.Ok {
-			common.Logger.Errorf("TKeygenRound2Accept2 err: %s", res.Err)
-			return false, fmt.Errorf("%s", res.Err)
-		}
-	case *keygen.TKgRound3Message:
-		res := tssdk.TKeygenRound3Accept(p.sessionId, recv)
-		if !res.Ok {
-			common.Logger.Errorf("TKeygenRound3Accept err: %s", res.Err)
-			return false, fmt.Errorf("%s", res.Err)
-		}
+
 	default: // unrecognised message, just ignore!
-		common.Logger.Warnf("unrecognised message ignored: %v", msg)
+		common.Logger.Warningf("unrecognised message ignored: %v", msg)
 		return false, nil
 	}
 	return true, nil
@@ -139,8 +128,4 @@ func (p *LocalParty) PartyID() string {
 
 func (p *LocalParty) SessionID() string {
 	return p.sessionId
-}
-
-func (p *LocalParty) String() string {
-	return fmt.Sprintf("id: %s, %s", p.PartyID(), p.BaseParty.String())
 }

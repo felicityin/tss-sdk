@@ -33,6 +33,7 @@ func NewAuxRound1Message(from *tss.PartyID, hash []byte) tss.ParsedMessage {
 	meta := tss.MessageRouting{
 		From:        from,
 		IsBroadcast: true,
+		Round:       "r1msg",
 	}
 	content := &AuxRound1Message{
 		Hash: hash,
@@ -60,6 +61,7 @@ func NewAuxRound2Message(
 	meta := tss.MessageRouting{
 		From:        from,
 		IsBroadcast: true,
+		Round:       "r2msg",
 	}
 	content := &AuxRound2Message{
 		Ssid:      ssid,
@@ -129,6 +131,7 @@ func NewAuxRound3Message(
 		From:        from,
 		To:          []*tss.PartyID{to},
 		IsBroadcast: false,
+		Round:       "r3msg",
 	}
 	content := &AuxRound3Message{
 		FacProof: facProofBytes,

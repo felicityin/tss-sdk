@@ -5,7 +5,8 @@ import (
 )
 
 func NewEddsaSignLocalParty(
-	isThreshold bool,
+	logLevel string, // "info, debug, error"
+	threshold int,
 	sessionId string,
 	sessionKind string,
 	deviceId string,
@@ -19,7 +20,7 @@ func NewEddsaSignLocalParty(
 	if err != nil {
 		return &MpcResult{Ok: false, Err: err.Error()}
 	}
-	res := onsign.NewLocalParty(isThreshold, sessionId, sessionKind, deviceId, parties, connectIds, msg, keyData, walletPath)
+	res := onsign.NewLocalParty(logLevel, threshold-1, sessionId, sessionKind, deviceId, parties, connectIds, msg, keyData, walletPath)
 	return toMpcRes(res)
 }
 
@@ -57,7 +58,7 @@ func EddsaSignRound2Finish(sessionId string) *MpcResult {
 	return toMpcRes(res)
 }
 
-func EddsaSignFinalExec(sessionId string) *MpcExecResult {
+func EddsaSignRound3Exec(sessionId string) *MpcExecResult {
 	res := onsign.OnsignRound3Exec(sessionId)
 	return toMpcExecRes(res)
 }

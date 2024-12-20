@@ -46,13 +46,16 @@ func OnsignRound3Exec(sessionId string) (result utils.TssExecResult) {
 		tmp, err := tmp.Add(round.temp.Rj[j])
 		if err != nil {
 			common.Logger.Errorf("[%d] err: Rj + c * Xj", Pj.Index)
-			result.Err = "err: err: Rj + c * Xj"
+			result.Err = "err: Rj + c * Xj"
 			return
 		}
 
 		if hex.EncodeToString(ziG.X().Bytes()) != hex.EncodeToString(tmp.X().Bytes()) ||
 			hex.EncodeToString(ziG.Y().Bytes()) != hex.EncodeToString(tmp.Y().Bytes()) {
-			common.Logger.Errorf("[%d] err: Zj != Rj + c * Xj", Pj.Index)
+			common.Logger.Errorf("ziG.X(): %d", ziG.X())
+			common.Logger.Errorf("tmp.X(): %d", tmp.X())
+			common.Logger.Errorf("ziG.Y(): %d", ziG.Y())
+			common.Logger.Errorf("tmp.Y(): %d", tmp.Y())
 			result.Err = "err: Zj != Rj + c * Xj"
 			return
 		}

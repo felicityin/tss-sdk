@@ -112,6 +112,7 @@ func OnsignRound2Exec(sessionId string) (result utils.TssExecResult) {
 	h.Write(encodedR[:])
 	h.Write(encodedPubKey[:])
 	if round.temp.fullBytesLen == 0 {
+		common.Logger.Infof("round.temp.fullBytesLen == 0")
 		h.Write(round.temp.m.Bytes())
 	} else {
 		var mBytes = make([]byte, round.temp.fullBytesLen)
